@@ -1,0 +1,56 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title>[[#{parts.list.headline}]]</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="d-flex flex-wrap mb-4">
+        <h1 class="flex-grow-1">[[#{parts.list.headline}]]</h1>
+        <div>
+            <a th:href="@{/partss/add}" class="btn btn-primary ms-2">[[#{parts.list.createNew}]]</a>
+        </div>
+    </div>
+    <div th:if="${partses.empty}">[[#{parts.list.empty}]]</div>
+    <div th:if="${!partses.empty}" class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead>
+            <tr>
+                <th scope="col">[[#{parts.partNo.label}]]</th>
+                <th scope="col">[[#{parts.vendorName.label}]]</th>
+                <th scope="col">[[#{parts.description.label}]]</th>
+                <th scope="col">[[#{parts.profilWidth.label}]]</th>
+                <th scope="col">[[#{parts.inQuality.label}]]</th>
+                <th scope="col">[[#{parts.onHand.label}]]</th>
+                <th scope="col">[[#{parts.onOrder.label}]]</th>
+                <th scope="col">[[#{parts.cost.label}]]</th>
+                <th><!-- --></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="parts : ${partses}">
+                <td>[[${parts.partNo}]]</td>
+                <td>[[${parts.vendorName}]]</td> <!-- Відображаємо назву постачальника -->
+                <td>[[${parts.description}]]</td>
+                <td>[[${parts.profilWidth}]]</td>
+                <td>[[${parts.inQuality}]]</td>
+                <td>[[${parts.onHand}]]</td>
+                <td>[[${parts.onOrder}]]</td>
+                <td>[[${parts.cost}]]</td>
+                <td>
+                    <div class="float-end text-nowrap">
+                        <a th:href="@{/partss/edit/{partNo}(partNo=${parts.partNo})}" class="btn btn-sm btn-secondary">[[#{parts.list.edit}]]</a>
+                        <form th:action="@{/partss/delete/{partNo}(partNo=${parts.partNo})}"
+                              th:hx-confirm="#{delete.confirm}" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-secondary">[[#{parts.list.delete}]]</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

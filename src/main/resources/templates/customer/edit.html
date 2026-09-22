@@ -1,0 +1,36 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+        layout:decorate="~{layout}">
+    <head>
+        <title>[[#{customer.edit.headline}]]</title>
+    </head>
+    <body>
+        <div layout:fragment="content">
+            <div class="d-flex flex-wrap mb-4">
+                <h1 class="flex-grow-1">[[#{customer.edit.headline}]]</h1>
+                <div>
+                    <a th:href="@{/customers}" class="btn btn-secondary">[[#{customer.edit.back}]]</a>
+                </div>
+            </div>
+            <div th:replace="~{fragments/forms::globalErrors('customer')}" />
+            <form th:action="${requestUri}" method="post">
+                <input type="submit" th:value="#{customer.edit.headline}" class="btn btn-primary mt-4 mb-4" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='custNo', disabled=true, type='number')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='company')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='addr1')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='addr2')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='city')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='state')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='zip')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='country')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='phone')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='fax')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='taxRate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='contact')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='lastInvoiceDate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='customer', field='priceLevel')}" />
+                <input type="submit" th:value="#{customer.edit.headline}" class="btn btn-primary mt-4" />
+            </form>
+        </div>
+    </body>
+</html>

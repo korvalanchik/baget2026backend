@@ -1,0 +1,2 @@
+ALTER TABLE items
+    MODIFY COLUMN ResellerPrice DECIMAL(10,2);

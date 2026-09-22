@@ -1,0 +1,53 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+    <head>
+        <title>[[#{orders.add.headline}]]</title>
+        <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    </head>
+    <body>
+        <div layout:fragment="content">
+            <div class="d-flex flex-wrap mb-4">
+                <h1 class="flex-grow-1">[[#{orders.add.headline}]]</h1>
+                <div>
+                  <a th:href="@{/orders}" class="btn btn-secondary">[[#{orders.add.back}]]</a>
+                </div>
+            </div>
+            <div th:replace="~{fragments/forms::globalErrors('orders')}" />
+            <form th:action="${requestUri}" method="post">
+                <div class="mb-3">
+                    <label for="custNo" class="form-label">[[#{orders.custNo.label}]]</label>
+                    <select id="custNo" name="custNo" class="form-select">
+                      <option th:each="customer : ${customers}" th:value="${customer.custNo}" th:text="${customer.company}"></option>
+                    </select>
+                </div>
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='factNo', type='number')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='saleDate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipDate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='empNo', type='number')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='receivedDate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='clientReceivedDate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipToAddr2')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipToCity')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipToState')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipToZip')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipToCountry')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipToPhone')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='shipVia')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='po')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='terms')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='paymentMethod')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='itemsTotal')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='taxRate')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='freight')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='amountPaid')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='amountDueN')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='income')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='priceLevel', type='number')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='statusOrder', type='number')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='orders', field='rahFacNo', type='number')}" />
+                <input type="submit" th:value="#{orders.add.headline}" class="btn btn-primary mt-4" />
+            </form>
+        </div>
+    </body>
+</html>

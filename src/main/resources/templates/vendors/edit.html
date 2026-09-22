@@ -1,0 +1,33 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+        layout:decorate="~{layout}">
+    <head>
+        <title>[[#{vendors.edit.headline}]]</title>
+    </head>
+    <body>
+        <div layout:fragment="content">
+            <div class="d-flex flex-wrap mb-4">
+                <h1 class="flex-grow-1">[[#{vendors.edit.headline}]]</h1>
+                <div>
+                    <a th:href="@{/vendorss}" class="btn btn-secondary">[[#{vendors.edit.back}]]</a>
+                </div>
+            </div>
+            <div th:replace="~{fragments/forms::globalErrors('vendors')}" />
+            <form th:action="${requestUri}" method="post">
+                <input type="submit" th:value="#{vendors.edit.headline}" class="btn btn-primary mt-4 mb-4" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='vendorNo', disabled=true, type='number')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='vendorName')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='address1')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='address2')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='city')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='state')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='zip')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='country')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='phone')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='fax')}" />
+                <div th:replace="~{fragments/forms::inputRow(object='vendors', field='preferred', type='number')}" />
+                <input type="submit" th:value="#{vendors.edit.headline}" class="btn btn-primary mt-4" />
+            </form>
+        </div>
+    </body>
+</html>

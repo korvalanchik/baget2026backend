@@ -1,0 +1,15 @@
+{
+  "productType": "FRAMED_ARTWORK",
+  "widthMm": 300,
+  "heightMm": 500,
+  "productQuantity": 3,
+  "framePartNo": 29340,
+  "glass": [
+    { "partNo": 12670, "quantityPerProduct": 1 },
+    { "partNo": 27760, "quantityPerProduct": 2 }
+  ],
+  "backings": [{ "partNo": 27520, "quantityPerProduct": 3 }],
+  "mats": [{ "partNo": 5160, "quantityPerProduct": 1 }],
+  "matMargins": { "leftMm": 50, "rightMm": 50, "topMm": 10, "bottomMm": 20 },
+  "suspension": { "hangerMode": "AUTO", "hangersPerProduct": 5, "includePozzi": false }
+}

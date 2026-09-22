@@ -1,0 +1,56 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+        layout:decorate="~{layout}">
+    <head>
+        <title>[[#{vendors.list.headline}]]</title>
+    </head>
+    <body>
+        <div layout:fragment="content">
+            <div class="d-flex flex-wrap mb-4">
+                <h1 class="flex-grow-1">[[#{vendors.list.headline}]]</h1>
+                <div>
+                    <a th:href="@{/vendors/add}" class="btn btn-primary ms-2">[[#{vendors.list.createNew}]]</a>
+                </div>
+            </div>
+            <div th:if="${vendorses.empty}">[[#{vendors.list.empty}]]</div>
+            <div th:if="${!vendorses.empty}" class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col">[[#{vendors.vendorNo.label}]]</th>
+                            <th scope="col">[[#{vendors.vendorName.label}]]</th>
+                            <th scope="col">[[#{vendors.address1.label}]]</th>
+                            <th scope="col">[[#{vendors.address2.label}]]</th>
+                            <th scope="col">[[#{vendors.city.label}]]</th>
+                            <th scope="col">[[#{vendors.state.label}]]</th>
+                            <th scope="col">[[#{vendors.zip.label}]]</th>
+                            <th scope="col">[[#{vendors.country.label}]]</th>
+                            <th><!-- --></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="vendors : ${vendorses}">
+                            <td>[[${vendors.vendorNo}]]</td>
+                            <td>[[${vendors.vendorName}]]</td>
+                            <td>[[${vendors.address1}]]</td>
+                            <td>[[${vendors.address2}]]</td>
+                            <td>[[${vendors.city}]]</td>
+                            <td>[[${vendors.state}]]</td>
+                            <td>[[${vendors.zip}]]</td>
+                            <td>[[${vendors.country}]]</td>
+                            <td>
+                                <div class="float-end text-nowrap">
+                                    <a th:href="@{/vendors/edit/{vendorNo}(vendorNo=${vendors.vendorNo})}" class="btn btn-sm btn-secondary">[[#{vendors.list.edit}]]</a>
+                                    <form th:action="@{/vendors/delete/{vendorNo}(vendorNo=${vendors.vendorNo})}"
+                                            th:hx-confirm="#{delete.confirm}" method="post" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-secondary">[[#{vendors.list.delete}]]</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+</html>

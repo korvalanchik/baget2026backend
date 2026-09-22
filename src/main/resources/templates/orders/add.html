@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Додати Замовлення</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+<h1>Додати Замовлення</h1>
+<form th:action="@{/orders/add}" th:object="${orders}" method="post">
+    <!-- Основні деталі замовлення -->
+    <div>
+        <label for="custNo">Customer:</label>
+        <select id="custNo" th:field="*{custNo}">
+            <option th:each="customer : ${customers}"
+                    th:value="${customer.custNo}"
+                    th:text="${customer.company}">Customer Name</option>
+        </select>
+    </div>
+    <!-- Поля для інших деталей замовлення -->
+
+    <!-- Контейнер для items -->
+    <div id="itemsContainer">
+        <!-- Вкладена форма для існуючих Items -->
+        <div th:each="item, iter : ${orders.items}" class="item-container">
+            <h3>Item <span th:text="${iter.index + 1}">1</span></h3>
+            <div>
+                <label th:for="|items[${iter.index}].partNo|">Part No:</label>
+                <input type="text" th:field="*{items[__${iter.index}__].partNo}" th:id="|items${iter.index}.partNo|" th:name="|items[${iter.index}].partNo|" />
+            </div>
+            <div>
+                <label th:for="|items[${iter.index}].quantity|">Quantity:</label>
+                <input type="number" th:field="*{items[__${iter.index}__].quantity}" th:id="|items${iter.index}.quantity|" th:name="|items[${iter.index}].quantity|" />
+            </div>
+            <div>
+                <label th:for="|items[${iter.index}].cost|">Cost:</label>
+                <input type="text" th:field="*{items[__${iter.index}__].cost}" th:id="|items${iter.index}.cost|" th:name="|items[${iter.index}].cost|" />
+            </div>
+            <button type="button" onclick="removeItem(this)">Remove Item</button>
+        </div>
+    </div>
+
+    <button type="button" onclick="addItem()">Add Item</button>
+
+    <div>
+        <button type="submit">Submit Order</button>
+    </div>
+</form>
+<script>
+    itemsNumber = 0;
+
+    function addItem() {
+        const itemContainer = document.createElement('div');
+        itemContainer.classList.add('item-container');
+
+        itemContainer.innerHTML = `
+            <h3>Item ${itemsNumber + 1}</h3>
+            <div>
+                <label for="items${itemsNumber}.partNo">Part No:</label>
+                <input type="text" id="items${itemsNumber}.partNo" name="items[${itemsNumber}].partNo" />
+            </div>
+            <div>
+                <label for="items${itemsNumber}.quantity">Quantity:</label>
+                <input type="number" id="items${itemsNumber}.quantity" name="items[${itemsNumber}].quantity" />
+            </div>
+            <div>
+                <label for="items${itemsNumber}.cost">Cost:</label>
+                <input type="text" id="items${itemsNumber}.cost" name="items[${itemsNumber}].cost" />
+            </div>
+            <button type="button" onclick="removeItem(this)">Remove Item</button>
+        `;
+        document.getElementById('itemsContainer').appendChild(itemContainer);
+        itemsNumber++;
+    }
+
+    function removeItem(button) {
+        const itemContainer = button.closest('.item-container');
+        itemContainer.remove();
+        itemsNumber--;
+    }
+</script>
+</body>
+</html>

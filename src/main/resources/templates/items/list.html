@@ -1,0 +1,56 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+        layout:decorate="~{layout}">
+    <head>
+        <title>[[#{items.list.headline}]]</title>
+    </head>
+    <body>
+        <div layout:fragment="content">
+            <div class="d-flex flex-wrap mb-4">
+                <h1 class="flex-grow-1">[[#{items.list.headline}]]</h1>
+                <div>
+                    <a th:href="@{/items/add}" class="btn btn-primary ms-2">[[#{items.list.createNew}]]</a>
+                </div>
+            </div>
+            <div th:if="${items.isEmpty()}">[[#{items.list.empty}]]</div>
+            <div th:if="${!items.isEmpty()}" class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col">[[#{items.orderNo.label}]]</th>
+                            <th scope="col">[[#{items.itemNo.label}]]</th>
+                            <th scope="col">[[#{items.partNo.label}]]</th>
+                            <th scope="col">[[#{items.profilWidth.label}]]</th>
+                            <th scope="col">[[#{items.width.label}]]</th>
+                            <th scope="col">[[#{items.height.label}]]</th>
+                            <th scope="col">[[#{items.qty.label}]]</th>
+                            <th scope="col">[[#{items.quantity.label}]]</th>
+                            <th><!-- --></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="item : ${items}">
+                            <td>[[${item.orderNo}]]</td>
+                            <td>[[${item.itemNo}]]</td>
+                            <td>[[${item.partNo}]]</td>
+                            <td>[[${item.profilWidth}]]</td>
+                            <td>[[${item.width}]]</td>
+                            <td>[[${item.height}]]</td>
+                            <td>[[${item.qty}]]</td>
+                            <td>[[${item.quantity}]]</td>
+                            <td>
+                                <div class="float-end text-nowrap">
+                                    <a th:href="@{/items/edit/{orderNo}/{itemNo}(orderNo=${item.orderNo}, itemNo=${item.itemNo})}" class="btn btn-sm btn-secondary">[[#{items.list.edit}]]</a>
+                                    <form th:action="@{/items/deleteitem/{orderNo}/{itemNo}(orderNo=${item.orderNo}, itemNo=${item.itemNo})}"
+                                            th:hx-confirm="#{delete.confirm}" method="post" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-secondary">[[#{items.list.delete}]]</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+</html>

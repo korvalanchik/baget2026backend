@@ -1,0 +1,2 @@
+ALTER TABLE `orders`
+    ADD COLUMN `TotalCost` FLOAT NULL DEFAULT NULL AFTER `Income`;
