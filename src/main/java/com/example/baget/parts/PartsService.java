@@ -122,10 +122,16 @@ public class PartsService {
 
     @Transactional(readOnly = true)
     public ResponseEntity<?> getBaget() {
+        return getBaget(false);
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getBaget(boolean configuredOnly) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
 
-        if (authorities.stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+        boolean admin = authorities.stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        if (admin && !configuredOnly) {
             List<Parts> parts = partsRepository.findAll(Sort.by("partNo"));
             List<PartsDTO> dtoList = parts.stream()
                     .map(part -> mapToDTO(part, new PartsDTO()))
@@ -133,10 +139,10 @@ public class PartsService {
             return ResponseEntity.ok(dtoList);
         }
 
-        String priceColumn = resolvePriceColumn(authorities);
+        String priceColumn = admin ? "Cost" : resolvePriceColumn(authorities);
         validatePriceColumn(priceColumn);
 
-        List<ProfilListDTO> profileParts = fetchProfileParts(priceColumn);
+        List<ProfilListDTO> profileParts = fetchProfileParts(priceColumn, configuredOnly);
         List<AccessoryListDTO> accessoryParts = fetchAccessoryParts(priceColumn);
 
         BagetResponseDTO response = new BagetResponseDTO(profileParts, accessoryParts);
@@ -154,19 +160,30 @@ public class PartsService {
     }
 
     private void validatePriceColumn(String priceColumn) {
-        Set<String> allowedColumns = Set.of("ListPrice", "ListPrice_1", "ListPrice_3");
+        Set<String> allowedColumns = Set.of("ListPrice", "ListPrice_1", "ListPrice_3", "Cost");
         if (!allowedColumns.contains(priceColumn)) {
             throw new IllegalArgumentException("Invalid price column: " + priceColumn);
         }
     }
 
-    private List<ProfilListDTO> fetchProfileParts(String priceColumn) {
+    private List<ProfilListDTO> fetchProfileParts(String priceColumn, boolean configuredOnly) {
+        // Match FRAME_PROFILE settings accepted by ConsumptionCalculator; stock is not an eligibility rule.
+        String settingsFilter = configuredOnly ? """
+            AND PartNo <> 33190
+            AND part_kind = 'MATERIAL'
+            AND calculation_method = 'FRAME_PROFILE'
+            AND unit_type = 'METER'
+            AND calculation_params IS NOT NULL
+            AND JSON_TYPE(calculation_params) = 'OBJECT'
+            AND JSON_LENGTH(calculation_params) = 0
+            """ : "";
         String sql = String.format("""
             SELECT PartNo, Description, ProfilWidth, InQuality, OnHand, %s AS ListPrice
             FROM parts
             WHERE InQuality = 2 AND ProfilWidth > 0.0003
+            %s
             ORDER BY ProfilWidth ASC
-            """, priceColumn);
+            """, priceColumn, settingsFilter);
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> new ProfilListDTO(
                 rs.getLong("partNo"),

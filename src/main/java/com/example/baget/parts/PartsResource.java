@@ -59,7 +59,8 @@ public class PartsResource {
     }
 
     @GetMapping("/profillist")
-    public ResponseEntity<?> getBaget() {
-        return partsService.getBaget();
+    public ResponseEntity<?> getBaget(
+            @RequestParam(name = "configuredOnly", defaultValue = "false") boolean configuredOnly) {
+        return partsService.getBaget(configuredOnly);
     }
 }
