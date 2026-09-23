@@ -13,5 +13,5 @@ public record MountingPreviewRequest(
         @Positive Long underframePartNo
 ) {
     public enum MountingType { NONE, PLANE, UNDERFRAME }
-    public enum CanvasType { BLANK, WITH_IMAGE, PRINT }
+    public enum CanvasType { BLANK, WITH_IMAGE, PRINT, EMBROIDERY }
 }

@@ -106,6 +106,33 @@ public final class SheetComposition {
         return lines;
     }
 
+    /** Standalone sheets: no frame, frame glue, hangers, cord or pozzi are inferred. */
+    public static List<ProductPreviewResponse.Line> composeUnframed(ProductPreviewRequest r,
+            PartsRepository parts, MaterialPreviewService materials, Authentication auth) {
+        var lines = new ArrayList<ProductPreviewResponse.Line>();
+        for (var s : glass(r)) lines.add(sheet(s.partNo() == SuspensionRules.MIRROR ? "MIRROR" : "GLASS",
+                s.partNo(), s.quantityPerProduct(), r, parts, materials, auth));
+        for (var s : backings(r)) lines.add(sheet("BACKING", s.partNo(), s.quantityPerProduct(), r, parts, materials, auth));
+        for (var s : mats(r)) lines.add(sheet("MAT", s.partNo(), s.quantityPerProduct(), r, parts, materials, auth));
+        return List.copyOf(lines);
+    }
+
+    public static void addFasteners(ProductPreviewRequest r, List<ProductPreviewResponse.Line> lines,
+            PartsRepository parts, MaterialPreviewService materials, Authentication auth) {
+        if (Boolean.TRUE.equals(r.antiFrame()))
+            lines.add(fastener(29220L,"ANTIFRAME_CLIP",PerimeterFasteners.count(width(r),height(r),200),r,parts,materials,auth));
+        if (Boolean.TRUE.equals(r.includeUnderframeFasteners()))
+            lines.add(fastener(27130L,"UNDERFRAME_FASTENER",PerimeterFasteners.count(r.widthMm(),r.heightMm(),400),r,parts,materials,auth));
+    }
+    private static ProductPreviewResponse.Line fastener(long id,String role,int count,ProductPreviewRequest r,
+            PartsRepository parts,MaterialPreviewService materials,Authentication auth) {
+        var p=load(parts,id);
+        if(p.getPartKind()!=PartKind.MATERIAL || p.getUnitType()!=UnitType.PIECE || p.getCalculationMethod()!=CalculationMethod.QUANTITY
+                || p.getCalculationParams()==null || !p.getCalculationParams().isEmpty()) throw settings(role);
+        return new ProductPreviewResponse.Line(role,"PERIMETER_RULE",materials.preview(
+                new MaterialPreviewRequest(id,null,null,r.productQuantity(),count),auth));
+    }
+
     public static ProductPreviewResponse.Line sheet(String role, long partNo, Integer layers,
             ProductPreviewRequest r, PartsRepository parts, MaterialPreviewService materials, Authentication auth) {
         var part = load(parts, partNo);

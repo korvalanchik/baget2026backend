@@ -13,8 +13,10 @@ public final class MountingRules {
                 || r.widthMm().signum() <= 0 || r.heightMm().signum() <= 0
                 || r.productQuantity() == null || r.productQuantity() <= 0)
             throw new IllegalArgumentException("Потрібні спосіб натяжки, додатні розміри та кількість");
+        if(r.canvasType()==CanvasType.EMBROIDERY && r.canvasPartNo()!=null)
+            throw new IllegalArgumentException("Вишивка є виробом клієнта: полотно майстерні не додається");
         boolean valid = switch (r.mountingType()) {
-            case PLANE -> r.underframePartNo() == null && r.canvasPartNo() == null && r.canvasType() == null;
+            case PLANE -> r.underframePartNo() == null && r.canvasPartNo() == null && (r.canvasType() == null || r.canvasType()==CanvasType.EMBROIDERY);
             case UNDERFRAME -> r.underframePartNo() != null && r.canvasType() != null;
             case NONE -> r.underframePartNo() == null && r.canvasPartNo() != null && r.canvasType() != null;
         };

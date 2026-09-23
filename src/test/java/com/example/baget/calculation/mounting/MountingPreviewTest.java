@@ -181,4 +181,17 @@ class MountingPreviewTest {
                 """))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_JSON"));
     }
+    @Test void embroideryPlaneChargesOnlyWorkNotCustomerFabricOrSecondBacking() {
+        var r=service.preview(new MountingPreviewRequest(MountingType.PLANE,n("300"),n("400"),2,CanvasType.EMBROIDERY,null,null),auth("ROLE_LEVEL2"));
+        assertEquals(1,r.lines().size());
+        assertEquals(33370L,r.lines().get(0).calculation().partNo());
+        eq("2",r.lines().get(0).calculation().totalConsumption());
+    }
+    @Test void embroideryUnderframeChargesBaseAndEmbroideryWork() {
+        var r=service.preview(underframe(CanvasType.EMBROIDERY,null,1),auth("ROLE_LEVEL2"));
+        assertTrue(r.lines().stream().anyMatch(l->l.role().equals("UNDERFRAME")));
+        assertTrue(r.lines().stream().anyMatch(l->l.calculation().partNo()==33370L));
+        assertFalse(r.lines().stream().anyMatch(l->l.role().equals("CANVAS") || l.calculation().partNo()==5140L));
+        assertThrows(PreviewException.class,()->service.preview(underframe(CanvasType.EMBROIDERY,27970L,1),auth("ROLE_LEVEL2")));
+    }
 }

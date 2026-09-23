@@ -376,5 +376,56 @@ class SheetCompositionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].product.lines[?(@.role == 'CORD')]").isEmpty());
     }
+    @Test void unframedSheetsHaveNoFrameOrAutomaticAccessories() throws Exception {
+        var request = new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
+            {"productType":"UNFRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
+             "glass":[{"partNo":27540,"quantityPerProduct":1}],
+             "backings":[{"partNo":4460,"quantityPerProduct":1}],
+             "mats":[{"partNo":5160,"quantityPerProduct":2}],
+             "matMargins":{"leftMm":50,"rightMm":50,"topMm":50,"bottomMm":50}}
+            """,ProductPreviewRequest.class);
+        var result=products.preview(request,auth("ROLE_LEVEL2"));
+        assertEquals(List.of("GLASS","BACKING","MAT"),result.lines().stream().map(ProductPreviewResponse.Line::role).toList());
+        eq("0.2",result.lines().get(0).calculation().totalConsumption());
+        eq("0.2",result.lines().get(1).calculation().totalConsumption());
+        eq("0.4",result.lines().get(2).calculation().totalConsumption());
+        eq("80",result.total());
+        verify(repository,never()).findById(33190L);
+        verify(repository,never()).findById(28540L);
+    }
+
+    @Test void unframedCannotSmuggleFrameOrBeEmpty() throws Exception {
+        for(String extra:List.of("", ",\"framePartNo\":29340")) {
+            var request=new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                "{\"productType\":\"UNFRAMED_ARTWORK\",\"widthMm\":300,\"heightMm\":400,\"productQuantity\":1"+extra+"}",ProductPreviewRequest.class);
+            assertEquals("INVALID_PRODUCT_SELECTION",assertThrows(PreviewException.class,()->products.preview(request,auth("ROLE_LEVEL2"))).getCode());
+        }
+    }
+    @Test void antiframeUsesOuterPerimeterOnceAndQuantityPerProduct() throws Exception {
+        part(29220,CalculationMethod.QUANTITY,UnitType.PIECE,10);
+        var request=new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
+        {"productType":"UNFRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":3,
+         "glass":[{"partNo":27760,"quantityPerProduct":1}],"backings":[{"partNo":4460,"quantityPerProduct":1}],
+         "mats":[{"partNo":5160,"quantityPerProduct":2}],"matMargins":{"leftMm":50,"rightMm":50,"topMm":50,"bottomMm":50},
+         "antiFrame":true,"suspension":{"hangerMode":"AUTO","includePozzi":false}}
+        """,ProductPreviewRequest.class);
+        var result=products.preview(request,auth("ROLE_LEVEL2"));
+        var clips=result.lines().stream().filter(l->l.role().equals("ANTIFRAME_CLIP")).findFirst().orElseThrow();
+        eq("9",clips.calculation().consumptionPerProduct());eq("27",clips.calculation().totalConsumption());
+        assertEquals(1,result.lines().stream().filter(l->l.role().equals("BACKING")).count());
+        assertTrue(result.lines().stream().anyMatch(l->l.calculation().partNo()==14450L));
+        assertFalse(result.lines().stream().anyMatch(l->Set.of("FRAME","CORD","MIRROR_GLUE").contains(l.role())));
+    }
+    @Test void underframeFastenersUseArtworkSizeNotMatBorders() throws Exception {
+        part(27130,CalculationMethod.QUANTITY,UnitType.PIECE,10);
+        var request=new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
+        {"productType":"FRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":2,"framePartNo":29340,
+         "underframePartNo":28060,"includeUnderframeFasteners":true,
+         "mats":[{"partNo":5160,"quantityPerProduct":1}],"matMargins":{"leftMm":100,"rightMm":100,"topMm":100,"bottomMm":100}}
+        """,ProductPreviewRequest.class);
+        var result=products.preview(request,auth("ROLE_LEVEL2"));
+        var line=result.lines().stream().filter(l->l.role().equals("UNDERFRAME_FASTENER")).findFirst().orElseThrow();
+        eq("4",line.calculation().consumptionPerProduct());eq("8",line.calculation().totalConsumption());
+    }
 }
 

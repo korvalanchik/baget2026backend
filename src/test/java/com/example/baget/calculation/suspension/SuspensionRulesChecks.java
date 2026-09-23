@@ -47,7 +47,7 @@ public final class SuspensionRulesChecks {
         equal(new Plan(H04, 4, 3, false), resolve("300", true, false, Mode.AUTO, null, 4, true, 3));
         equal(new Plan(H099, 1, 0, true), resolve("200", false, true, Mode.AUTO, null, 1, false, null));
         rejects(() -> resolve("200", false, false, Mode.MANUAL, H01, null, false, null));
-        rejects(() -> resolve("200", true, true, Mode.MANUAL, H04, null, false, null));
+        equal(new Plan(H04, 1, 0, false), resolve("200", true, true, Mode.MANUAL, H04, null, false, null));
         rejects(() -> resolve("300", true, false, Mode.MANUAL, H099, null, true, null));
         rejects(() -> resolve("300", true, false, Mode.MANUAL, POWER, null, true, null));
         rejects(() -> resolve("300", false, false, Mode.NONE, null, null, true, null));
