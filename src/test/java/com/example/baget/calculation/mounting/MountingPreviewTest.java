@@ -181,17 +181,25 @@ class MountingPreviewTest {
                 """))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_JSON"));
     }
-    @Test void embroideryPlaneChargesOnlyWorkNotCustomerFabricOrSecondBacking() {
-        var r=service.preview(new MountingPreviewRequest(MountingType.PLANE,n("300"),n("400"),2,CanvasType.EMBROIDERY,null,null),auth("ROLE_LEVEL2"));
-        assertEquals(1,r.lines().size());
-        assertEquals(33370L,r.lines().get(0).calculation().partNo());
-        eq("2",r.lines().get(0).calculation().totalConsumption());
+    @Test void embroideryPlaneChargesMaterialsAndWorkWithoutCustomerFabricOrSecondBacking() {
+        var r = service.preview(new MountingPreviewRequest(MountingType.PLANE, n("300"), n("400"),
+                2, CanvasType.EMBROIDERY, null, null), auth("ROLE_LEVEL2"));
+        assertEquals(List.of(5130L, 33370L), r.lines().stream().map(l -> l.calculation().partNo()).toList());
+        eq("0.2542", r.lines().get(0).calculation().totalConsumption()); // (0.3 + .01) * (0.4 + .01) * 2
+        eq("2", r.lines().get(1).calculation().totalConsumption());
+        eq("140.06", r.total());
+        verify(repository, never()).findById(5140L);
+        verify(repository, never()).findById(27970L);
     }
-    @Test void embroideryUnderframeChargesBaseAndEmbroideryWork() {
-        var r=service.preview(underframe(CanvasType.EMBROIDERY,null,1),auth("ROLE_LEVEL2"));
-        assertTrue(r.lines().stream().anyMatch(l->l.role().equals("UNDERFRAME")));
-        assertTrue(r.lines().stream().anyMatch(l->l.calculation().partNo()==33370L));
-        assertFalse(r.lines().stream().anyMatch(l->l.role().equals("CANVAS") || l.calculation().partNo()==5140L));
-        assertThrows(PreviewException.class,()->service.preview(underframe(CanvasType.EMBROIDERY,27970L,1),auth("ROLE_LEVEL2")));
+    @Test void embroideryUnderframeChargesBaseAnd5140PerimeterWork() {
+        var r = service.preview(underframe(CanvasType.EMBROIDERY, null, 2), auth("ROLE_LEVEL2"));
+        assertEquals(List.of(29720L, 5140L), r.lines().stream().map(l -> l.calculation().partNo()).toList());
+        eq("5.6", r.lines().get(1).calculation().totalConsumption());
+        eq("112", r.lines().get(1).calculation().amount());
+        verify(repository, never()).findById(5130L);
+        verify(repository, never()).findById(33370L);
+        verify(repository, never()).findById(27970L);
+        assertThrows(PreviewException.class, () -> service.preview(
+                underframe(CanvasType.EMBROIDERY, 27970L, 1), auth("ROLE_LEVEL2")));
     }
 }

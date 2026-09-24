@@ -39,20 +39,18 @@ public class MountingPreviewService {
         }
         var lines = new ArrayList<ProductPreviewResponse.Line>();
         if (r.mountingType() == PLANE) {
-            if(r.canvasType()!=MountingPreviewRequest.CanvasType.EMBROIDERY) configured(5130L, PartKind.MATERIAL, CalculationMethod.AREA_WITH_MARGIN, UnitType.SQUARE_METER,
+            configured(5130L, PartKind.MATERIAL, CalculationMethod.AREA_WITH_MARGIN, UnitType.SQUARE_METER,
                     Map.of("marginWidthMm", BigDecimal.TEN, "marginHeightMm", BigDecimal.TEN));
             configured(33370L, PartKind.WORK, CalculationMethod.FIXED, UnitType.PIECE, Map.of());
-            if(r.canvasType()!=MountingPreviewRequest.CanvasType.EMBROIDERY) lines.add(materialLine(5130L, "STRETCH_MATERIAL", "PLANE_RULE", r, auth));
+            lines.add(materialLine(5130L, "STRETCH_MATERIAL", "PLANE_RULE", r, auth));
             lines.add(materialLine(33370L, "STRETCH_WORK", "PLANE_RULE", r, auth));
         }
         if (r.mountingType() == UNDERFRAME) {
             lines.addAll(underframes.compose(new ProductPreviewRequest(
                     ProductPreviewRequest.ProductType.UNDERFRAME, r.widthMm(), r.heightMm(),
                     r.productQuantity(), null, null, r.underframePartNo()), auth));
-            boolean embroidery=r.canvasType()==MountingPreviewRequest.CanvasType.EMBROIDERY;
-            long work = embroidery ? 33370L : MountingRules.workPartNo(r.canvasType());
-            configured(work, PartKind.WORK, embroidery?CalculationMethod.FIXED:CalculationMethod.PERIMETER,
-                    embroidery?UnitType.PIECE:UnitType.METER, Map.of());
+            long work = MountingRules.workPartNo(r.canvasType());
+            configured(work, PartKind.WORK, CalculationMethod.PERIMETER, UnitType.METER, Map.of());
             lines.add(materialLine(work, "STRETCH_WORK", "UNDERFRAME_STRETCH_RULE", r, auth));
         }
         if (r.canvasPartNo() != null) {
