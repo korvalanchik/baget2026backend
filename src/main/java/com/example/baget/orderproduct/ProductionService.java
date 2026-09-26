@@ -124,7 +124,7 @@ public class ProductionService {
             db.update("UPDATE items SET Qty=?,Width=?,Height=?,actual_amount=?,`Sum`=? WHERE OrderNo=? AND ItemNo=?",
                 l.actual(),l.widthMm()==null?null:l.widthMm().movePointLeft(3),l.heightMm()==null?null:l.heightMm().movePointLeft(3),amount,amount,id,l.itemNo());
         }
-        db.update("UPDATE order_products p SET actual_total=(SELECT COALESCE(SUM(i.actual_amount),0) FROM items i WHERE i.order_product_id=p.id) WHERE p.order_no=? AND p.active=1",id);
+        db.update("UPDATE order_products p SET production_state='COMPLETED',production_confirmed=1,current_location='WORKSHOP',actual_total=(SELECT COALESCE(SUM(i.actual_amount),0) FROM items i WHERE i.order_product_id=p.id) WHERE p.order_no=? AND p.active=1",id);
         db.update("UPDATE orders SET production_finalized=1,production_total=?,ItemsTotal=?,TotalCost=(SELECT COALESCE(SUM(COALESCE(i.Cost,0)*i.actual_consumption),0) FROM items i WHERE i.OrderNo=?),StatusOrder=6 WHERE OrderNo=?",total,total,id,id);
         bump(id,"FINALIZE",auth,null);
         for(long p:parts) reservations.refillPart(p,auth.getName());

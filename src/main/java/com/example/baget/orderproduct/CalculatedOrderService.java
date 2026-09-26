@@ -172,8 +172,8 @@ public class CalculatedOrderService {
     private void persist(long orderNo,long revision,List<Priced> priced,String actor) {
         long itemNo=1;
         for(var p:priced) {
-            db.update("INSERT INTO order_products(order_no,client_product_id,revision,configuration,calculation,total) VALUES(?,?,?,?,?,?)",
-                    orderNo,p.draft().clientProductId(),revision,encode(Map.of("schemaVersion",1,"draft",p.draft())),encode(p.result()),p.result().total());
+            db.update("INSERT INTO order_products(order_no,client_product_id,revision,configuration,calculation,total,tracking_id) VALUES(?,?,?,?,?,?,?)",
+                    orderNo,p.draft().clientProductId(),revision,encode(Map.of("schemaVersion",1,"draft",p.draft())),encode(p.result()),p.result().total(),UUID.randomUUID().toString());
             long productId=db.queryForObject("SELECT id FROM order_products WHERE order_no=? AND revision=? AND client_product_id=?",Long.class,orderNo,revision,p.draft().clientProductId());
             var demand=new TreeMap<Long,BigDecimal>();
             for(int ci=0;ci<p.result().items().size();ci++) {

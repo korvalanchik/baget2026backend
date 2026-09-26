@@ -85,7 +85,7 @@ public class WorkshopService {
         if(!WorkshopRules.transition(p.state(),r.state())) throw conflict("Недопустимий перехід стану виробу");
         if(WorkshopRules.needsReason(p.state(),r.state()) && (r.note()==null || r.note().isBlank())) throw conflict("Вкажіть причину призупинення або відновлення");
         db.update("UPDATE order_products SET production_state=? WHERE id=?",r.state().name(),pid);
-        if(r.state()==State.ACCEPTED) db.update("UPDATE order_products SET assigned_master=?,accepted_at=CURRENT_TIMESTAMP(6) WHERE id=?",auth.getName(),pid);
+        if(r.state()==State.ACCEPTED) db.update("UPDATE order_products SET current_location='WORKSHOP',assigned_master=?,accepted_at=CURRENT_TIMESTAMP(6) WHERE id=?",auth.getName(),pid);
         // Imported in-progress orders retain their previous state; first new action records the responsible master.
         db.update("UPDATE order_products SET assigned_master=COALESCE(assigned_master,?),accepted_at=COALESCE(accepted_at,CURRENT_TIMESTAMP(6)) WHERE id=?",auth.getName(),pid);
         audit(id,pid,"STATE_"+r.state(),r.note(),auth);
