@@ -144,7 +144,8 @@ public class CalculatedOrderService {
     }
     private void editable(long orderNo,View old,long revision) {
         if(old.revision()!=revision) throw error(HttpStatus.CONFLICT,"STALE_REVISION","Замовлення вже змінено. Відкрийте його повторно");
-        if(old.statusOrder()!=1 || db.queryForObject("SELECT COUNT(*) FROM invoice_orders WHERE order_no=?",Long.class,orderNo)>0
+        if(Boolean.TRUE.equals(db.queryForObject("SELECT workshop_mode FROM orders WHERE OrderNo=?",Boolean.class,orderNo))
+                || old.statusOrder()!=1 || db.queryForObject("SELECT COUNT(*) FROM invoice_orders WHERE order_no=?",Long.class,orderNo)>0
                 || db.queryForObject("SELECT COUNT(*) FROM items WHERE OrderNo=? AND COALESCE(Qty,0)<>0",Long.class,orderNo)>0)
             throw error(HttpStatus.CONFLICT,"ORDER_LOCKED","Редагування/скасування доступне лише до виробництва й виставлення рахунку. Фактичні витрати та фінансові операції потребують окремого узгодження");
     }

@@ -52,6 +52,15 @@ public class InventoryReservations {
             db.update("UPDATE material_reservations SET active=0 WHERE id=?",row.id());
         }
     }
+    /** Caller holds the order lock and all affected Parts locks. Other products keep their reservations. */
+    public void releaseProduct(long productId,String actor) {
+        var rows=db.query("SELECT id,demand,reserved FROM material_reservations WHERE order_product_id=? AND active=1 ORDER BY part_no,id FOR UPDATE",
+                (rs,n)->new Row(rs.getLong(1),rs.getBigDecimal(2),rs.getBigDecimal(3)),productId);
+        for(var row:rows) {
+            change(row.id(),row.reserved(),BigDecimal.ZERO,"PRODUCTION",actor);
+            db.update("UPDATE material_reservations SET active=0 WHERE id=?",row.id());
+        }
+    }
     private void change(long id,BigDecimal before,BigDecimal after,String reason,String actor) {
         db.update("UPDATE material_reservations SET reserved=? WHERE id=?",after,id);
         db.update("INSERT INTO reservation_events(reservation_id,reserved_before,reserved_after,reason,actor) VALUES(?,?,?,?,?)",id,before,after,reason,actor);

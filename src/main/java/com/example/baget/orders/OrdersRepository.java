@@ -49,6 +49,8 @@ public interface OrdersRepository extends JpaRepository<Orders, Long> {
         WHERE o.statusOrder != 4
     """)
     Page<OrderSummaryView> findAllSummaryBy(Pageable pageable);
+
+    Page<OrderSummaryView> findSummaryByBranch_NameIn(java.util.Collection<String> names, Pageable pageable);
     List<Orders> findByRahFacNo(Long rahFacNo);
     boolean existsByRahFacNo(Long rahFacNo);
 

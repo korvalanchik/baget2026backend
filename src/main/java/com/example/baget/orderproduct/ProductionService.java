@@ -43,6 +43,8 @@ public class ProductionService {
     private View locked(long id,long revision,Authentication auth) {
         if(db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,id).isEmpty()) throw conflict("Замовлення не знайдено");
         orders.read(id,auth);
+        if(Boolean.TRUE.equals(db.queryForObject("SELECT workshop_mode FROM orders WHERE OrderNo=?",Boolean.class,id)))
+            throw conflict("Замовлення ведеться по виробах. Скористайтеся карткою майстерні");
         var v=view(id,auth);
         if(v.revision()!=revision) throw conflict("Замовлення змінено. Оновіть картку перед повторною дією");
         return v;
@@ -131,9 +133,15 @@ public class ProductionService {
     /** Called by the existing invoice service in its transaction; client amounts are ignored. */
     public BigDecimal invoiceAmount(long id,Authentication auth) {
         db.queryForObject("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,id);
-        access(auth,id);
+        boolean workshop=Boolean.TRUE.equals(db.queryForObject("SELECT workshop_mode FROM orders WHERE OrderNo=?",Boolean.class,id));
+        if(workshop) {
+            orders.read(id,auth);
+            var u=users.findByUsername(auth.getName()).orElseThrow();
+            if(u.getRoles().stream().noneMatch(r->Set.of("ROLE_ADMIN","ROLE_COUNTER").contains(r.getName())))
+                throw new PreviewException(HttpStatus.FORBIDDEN,"ACCOUNTANT_REQUIRED","Рахунок оформлює бухгалтер або адміністратор");
+        } else access(auth,id);
         var v=view(id,auth);
-        if(!v.finalized() || !Set.of(6,11,12).contains(v.status()) || v.total()==null || v.total().signum()<=0)
+        if(!v.finalized() || !(workshop?Set.of(3,6,11,12):Set.of(6,11,12)).contains(v.status()) || v.total()==null || v.total().signum()<=0)
             throw conflict("Спочатку підтвердьте фактичні витрати й остаточний розрахунок");
         return v.total();
     }
