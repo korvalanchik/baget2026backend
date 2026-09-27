@@ -25,7 +25,7 @@ class WorkshopServiceTest {
     WorkshopService.Product product(boolean confirmed) {
         var line=new ProductionService.Line(1,10,"art-1",100,"Матеріал","FRAME","METER",n("5"),n("5"),null,null,n("10"),n("50"),true);
         return new WorkshopService.Product(10,"art-1",IN_PROGRESS,2,n("300"),n("400"),"Обмір","master",null,null,
-            confirmed,null,null,null,new ObjectMapper().createObjectNode(),List.of(line),List.of());
+            confirmed,null,null,null,new ObjectMapper().createObjectNode(),List.of(line),List.of(),Map.of());
     }
     void setView(boolean confirmed) { doReturn(new WorkshopService.View(1,7,2,true,List.of(product(confirmed)))).when(service).view(1,auth); }
     @BeforeEach void setup() {
@@ -33,7 +33,7 @@ class WorkshopServiceTest {
         var user=new User(); var role=new Role(); role.setName("ROLE_FOREMAN"); user.setRoles(List.of(role));
         when(users.findByUsername("master")).thenReturn(Optional.of(user));
         auth=new UsernamePasswordAuthenticationToken("master","",List.of());
-        service=spy(new WorkshopService(db,mock(CalculatedOrderService.class),mock(ProductionService.class),reservations,users,new ObjectMapper()));
+        service=spy(new WorkshopService(db,mock(CalculatedOrderService.class),mock(ProductionService.class),reservations,users,new ObjectMapper(),mock(ReworkService.class)));
         when(db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,1L)).thenReturn(List.of(1L));
         when(db.queryForObject("SELECT production_finalized FROM orders WHERE OrderNo=?",Boolean.class,1L)).thenReturn(false);
         when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,1L)).thenReturn(0L);

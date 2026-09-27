@@ -61,6 +61,21 @@ public class InventoryReservations {
             db.update("UPDATE material_reservations SET active=0 WHERE id=?",row.id());
         }
     }
+    /** Caller holds order and all relevant Parts locks. Demand is ONLY the current rework's extra usage. */
+    public void reworkDemand(long productId,long partNo,BigDecimal demand,String actor) {
+        if(demand==null || demand.signum()<0) throw new IllegalArgumentException("Invalid rework demand");
+        var rows=db.query("SELECT id,demand,reserved FROM material_reservations WHERE order_product_id=? AND part_no=? FOR UPDATE",
+                (rs,n)->new Row(rs.getLong(1),rs.getBigDecimal(2),rs.getBigDecimal(3)),productId,partNo);
+        if(rows.isEmpty()) {
+            if(demand.signum()>0) add(productId,partNo,demand,actor);
+            return;
+        }
+        var row=rows.get(0);var keep=row.reserved().min(demand);
+        // Update demand/reserved together to satisfy reserved <= demand at every SQL statement.
+        db.update("UPDATE material_reservations SET demand=?,reserved=?,active=? WHERE id=?",demand,keep,demand.signum()>0,row.id());
+        db.update("INSERT INTO reservation_events(reservation_id,reserved_before,reserved_after,reason,actor) VALUES(?,?,?,'REWORK_DEMAND',?)",
+                row.id(),row.reserved(),keep,actor);
+    }
     private void change(long id,BigDecimal before,BigDecimal after,String reason,String actor) {
         db.update("UPDATE material_reservations SET reserved=? WHERE id=?",after,id);
         db.update("INSERT INTO reservation_events(reservation_id,reserved_before,reserved_after,reason,actor) VALUES(?,?,?,?,?)",id,before,after,reason,actor);

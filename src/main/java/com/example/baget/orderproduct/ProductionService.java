@@ -140,6 +140,8 @@ public class ProductionService {
             if(u.getRoles().stream().noneMatch(r->Set.of("ROLE_ADMIN","ROLE_COUNTER").contains(r.getName())))
                 throw new PreviewException(HttpStatus.FORBIDDEN,"ACCOUNTANT_REQUIRED","Рахунок оформлює бухгалтер або адміністратор");
         } else access(auth,id);
+        if(workshop && db.queryForObject("SELECT COUNT(*) FROM order_products WHERE order_no=? AND active=1 AND (active_rework_id IS NOT NULL OR pending_location='WORKSHOP' OR ((EXISTS(SELECT 1 FROM product_transfers t WHERE t.product_id=order_products.id AND t.to_location='WORKSHOP' AND t.action='ACCEPT') OR EXISTS(SELECT 1 FROM product_reworks rw WHERE rw.product_id=order_products.id)) AND warehouse_received_at IS NULL))",Long.class,id)>0)
+            throw conflict("Виріб повертається або доопрацьовується. Після завершення потрібне повторне приймання на склад");
         var v=view(id,auth);
         if(!v.finalized() || !(workshop?Set.of(3,6,11,12):Set.of(6,11,12)).contains(v.status()) || v.total()==null || v.total().signum()<=0)
             throw conflict("Спочатку підтвердьте фактичні витрати й остаточний розрахунок");

@@ -38,6 +38,12 @@ class ProductInvoiceProcessorTest {
   product.put("production_confirmed",true);
   when(db.queryForMap(startsWith("SELECT p.*,o.BranchNo"),eq(10L))).thenReturn(product);
  }
+ @Test void pendingReturnAndOpenReworkCannotBeBilled() {
+  product.put("pending_location","WORKSHOP");
+  assertThrows(PreviewException.class,()->service.issue(request(),auth));
+  product.remove("pending_location");product.put("active_rework_id",22L);
+  assertThrows(PreviewException.class,()->service.issue(request(),auth));verifyNoInteractions(orchestrator);
+ }
  @Test void notReceivedCannotBeBilled(){product.put("warehouse_received_at",null);assertThrows(PreviewException.class,()->service.issue(request(),auth));verifyNoInteractions(orchestrator);}
  @Test void alreadyClaimedCannotCreateSecondDebt(){when(db.queryForObject("SELECT COUNT(*) FROM product_invoice_claims WHERE product_id=?",Long.class,10L)).thenReturn(1L);assertThrows(PreviewException.class,()->service.issue(request(),auth));verifyNoInteractions(orchestrator);}
  @Test void oldWholeOrderInvoiceBlocksPartialBilling(){when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,1L)).thenReturn(1L);assertThrows(PreviewException.class,()->service.issue(request(),auth));verifyNoInteractions(orchestrator);}

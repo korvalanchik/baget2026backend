@@ -38,9 +38,9 @@ public final class SuspensionRules {
             }
         };
         if (hanger != null) {
-            if (crocodile(hanger) && (!hasRigidBacking))
-                throw new IllegalArgumentException("Крокодили дозволені лише з ДВП/ПВХ");
-            if ((hasMirror || !hasRigidBacking) && hanger != automatic && !(hasRigidBacking && crocodile(hanger)))
+            if (crocodile(hanger) && (hasMirror || !hasRigidBacking))
+                throw new IllegalArgumentException("Крокодили дозволені лише з ДВП/ПВХ і без дзеркала");
+            if ((hasMirror || !hasRigidBacking) && hanger != automatic)
                 throw new IllegalArgumentException("Для дзеркала або виробу без ДВП/ПВХ дотримуйтеся порога 400/800 мм");
         }
         int count = hanger == null ? 0 : hangerQuantity != null ? hangerQuantity

@@ -25,15 +25,16 @@ public class WorkshopService {
     private final InventoryReservations reservations;
     private final UsersRepository users;
     private final ObjectMapper json;
+    private final ReworkService reworks;
     public WorkshopService(JdbcTemplate db, CalculatedOrderService orders, ProductionService production,
-            InventoryReservations reservations, UsersRepository users, ObjectMapper json) {
-        this.db=db; this.orders=orders; this.production=production; this.reservations=reservations; this.users=users; this.json=json;
+            InventoryReservations reservations, UsersRepository users, ObjectMapper json, ReworkService reworks) {
+        this.db=db; this.orders=orders; this.production=production; this.reservations=reservations; this.users=users; this.json=json; this.reworks=reworks;
     }
     public record Event(long revision,String action,String actor,String note,LocalDateTime at,JsonNode snapshot) {}
     public record Product(long id,String name,State state,long revision,BigDecimal widthMm,BigDecimal heightMm,
             String note,String master,LocalDateTime acceptedAt,LocalDateTime completedAt,boolean confirmed,
             BigDecimal total,Long confirmedRevision,JsonNode confirmedCalculation,JsonNode configuration,
-            List<ProductionService.Line> lines,List<Event> events) {}
+            List<ProductionService.Line> lines,List<Event> events,Map<String,Object> rework) {}
     public record View(long orderNo,long revision,int status,boolean canEdit,List<Product> products) {}
     public record Correction(@Positive long expectedRevision,
             @NotNull @Positive @DecimalMax("999999") @Digits(integer=6,fraction=3) BigDecimal widthMm,
@@ -56,7 +57,7 @@ public class WorkshopService {
                 rs.getString("workshop_note"),rs.getString("assigned_master"),rs.getObject("accepted_at",LocalDateTime.class),
                 rs.getObject("completed_at",LocalDateTime.class),rs.getBoolean("production_confirmed"),rs.getBigDecimal("actual_total"),
                 rs.getObject("confirmed_revision",Long.class),decode(rs.getString("confirmed_calculation")),decode(rs.getString("configuration")),
-                lines.stream().filter(l->l.productId()==pid).toList(),events(pid));
+                lines.stream().filter(l->l.productId()==pid).toList(),events(pid),reworks.view(id,pid));
         },id);
         return new View(id,order.revision(),order.statusOrder(),foreman(auth),products);
     }
@@ -75,6 +76,7 @@ public class WorkshopService {
         if(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,id)>0)
             throw conflict("Для замовлення вже оформлено рахунок. Потрібне окреме узгодження");
         var product=v.products().stream().filter(p->p.id()==pid).findFirst().orElseThrow(()->conflict("Виріб не належить цьому замовленню або вже неактивний"));
+        if(product.rework()!=null && product.rework().get("active")!=null) throw conflict("Відкрито доопрацювання. Використайте окрему форму додаткових витрат");
         if(product.confirmed()) throw conflict("Виріб завершено. Підтверджений розрахунок захищено від змін");
         // Take ownership from the order-level API within the same transaction.
         db.update("UPDATE orders SET workshop_mode=1 WHERE OrderNo=?",id);

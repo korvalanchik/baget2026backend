@@ -11,7 +11,24 @@ import java.util.Map;
 @RequestMapping("/api/calculated-orders/{orderNo}/workshop")
 public class WorkshopController {
     private final WorkshopService service;
-    public WorkshopController(WorkshopService service) { this.service=service; }
+    private final ReworkService reworks;
+    public WorkshopController(WorkshopService service,ReworkService reworks) { this.service=service; this.reworks=reworks; }
+    @GetMapping("/rework-catalog") public Object catalog(@PathVariable("orderNo") long orderNo,
+            @RequestParam(name="q",defaultValue="") String q,Authentication a) {
+        return reworks.catalog(orderNo,q,a);
+    }
+    @PostMapping("/{productId}/rework") public WorkshopService.View rework(@PathVariable("orderNo") long orderNo,
+            @PathVariable("productId") long productId,@Valid @RequestBody ReworkService.Open r,Authentication a) {
+        reworks.open(orderNo,productId,r,a);return service.view(orderNo,a);
+    }
+    @PutMapping("/{productId}/rework") public WorkshopService.View saveRework(@PathVariable("orderNo") long orderNo,
+            @PathVariable("productId") long productId,@Valid @RequestBody ReworkService.Save r,Authentication a) {
+        reworks.save(orderNo,productId,r,a);return service.view(orderNo,a);
+    }
+    @PostMapping("/{productId}/rework/complete") public WorkshopService.View completeRework(@PathVariable("orderNo") long orderNo,
+            @PathVariable("productId") long productId,@Valid @RequestBody CalculatedOrderController.Revision r,Authentication a) {
+        reworks.complete(orderNo,productId,r.expectedRevision(),a);return service.view(orderNo,a);
+    }
     @GetMapping public WorkshopService.View read(@PathVariable("orderNo") long orderNo, Authentication a) {
         return service.view(orderNo,a);
     }
