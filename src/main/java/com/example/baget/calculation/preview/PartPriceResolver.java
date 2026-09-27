@@ -17,8 +17,25 @@ public class PartPriceResolver {
         }
     }
 
+    /** Geometry previews must work even when the operator has no configured sale-price tier.
+     * The caller must discard monetary fields and must never persist a quote made with this context. */
+    public Authentication consumptionOnly(Authentication source) {
+        requireAuthenticated(source);
+        return new QuantityAuthentication(source);
+    }
+    private static final class QuantityAuthentication extends org.springframework.security.authentication.AbstractAuthenticationToken {
+        private final Authentication source;
+        private QuantityAuthentication(Authentication source) {
+            super(source.getAuthorities()); this.source=source; setAuthenticated(true);
+        }
+        @Override public Object getPrincipal() { return source.getPrincipal(); }
+        @Override public Object getCredentials() { return ""; }
+    }
+
     public BigDecimal resolve(Parts part, Authentication auth) {
         requireAuthenticated(auth);
+        // Only an internal typed context can skip pricing. A JWT authority with the same name cannot.
+        if (auth instanceof QuantityAuthentication) return BigDecimal.ZERO;
         Set<String> roles = auth.getAuthorities().stream()
                 .map(a -> a.getAuthority()).collect(Collectors.toSet());
         Double value;

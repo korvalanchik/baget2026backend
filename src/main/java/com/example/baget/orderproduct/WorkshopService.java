@@ -109,6 +109,13 @@ public class WorkshopService {
             db.update("UPDATE items SET actual_consumption=?,actual_width_mm=?,actual_height_mm=?,actual_amount=? WHERE OrderNo=? AND ItemNo=? AND order_product_id=?",
                 a.quantity(),a.widthMm(),a.heightMm(),ProductionRules.amount(a.quantity(),line.price()),id,line.itemNo(),pid);
         }
+        // Actual measurements replace the product's remaining demand, not physical stock.
+        var demand=new TreeMap<Long,BigDecimal>();
+        for(var line:p.lines())if(line.material())demand.merge(line.partNo(),submitted.get(line.itemNo()).quantity(),BigDecimal::add);
+        var partIds=new TreeSet<>(db.queryForList("SELECT part_no FROM material_reservations WHERE order_product_id=? AND active=1",Long.class,pid));
+        partIds.addAll(demand.keySet());reservations.lockParts(partIds);
+        for(long part:partIds)reservations.productionDemand(pid,part,demand.getOrDefault(part,BigDecimal.ZERO),auth.getName());
+        for(long part:partIds)reservations.refillPart(part,auth.getName());
         db.update("UPDATE order_products SET measured_width_mm=?,measured_height_mm=?,workshop_note=?,assigned_master=COALESCE(assigned_master,?),accepted_at=COALESCE(accepted_at,CURRENT_TIMESTAMP(6)) WHERE id=?",
             r.widthMm(),r.heightMm(),r.note(),auth.getName(),pid);
         audit(id,pid,"CORRECTION",r.note(),auth);

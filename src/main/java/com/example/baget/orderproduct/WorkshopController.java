@@ -12,7 +12,14 @@ import java.util.Map;
 public class WorkshopController {
     private final WorkshopService service;
     private final ReworkService reworks;
-    public WorkshopController(WorkshopService service,ReworkService reworks) { this.service=service; this.reworks=reworks; }
+    private final WorkshopCalculationService calculations;
+    public WorkshopController(WorkshopService service,ReworkService reworks,WorkshopCalculationService calculations) {
+        this.service=service; this.reworks=reworks; this.calculations=calculations;
+    }
+    @PostMapping("/{productId}/calculate") public WorkshopCalculationService.Result calculate(@PathVariable("orderNo") long orderNo,
+            @PathVariable("productId") long productId,@Valid @RequestBody WorkshopCalculationService.Request r,Authentication a) {
+        return calculations.calculate(orderNo,productId,r,a);
+    }
     @GetMapping("/rework-catalog") public Object catalog(@PathVariable("orderNo") long orderNo,
             @RequestParam(name="q",defaultValue="") String q,Authentication a) {
         return reworks.catalog(orderNo,q,a);

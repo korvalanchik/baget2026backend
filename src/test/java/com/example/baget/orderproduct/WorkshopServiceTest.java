@@ -77,6 +77,15 @@ class WorkshopServiceTest {
         assertThrows(PreviewException.class,()->service.complete(1,10,7,auth));
         verifyNoInteractions(reservations);
     }
+    @Test void savedActualsReplaceDemandWithoutPhysicalConsumption() {
+        when(db.queryForObject("SELECT COUNT(*) FROM order_products WHERE order_no=? AND active=1 AND production_confirmed=0",Long.class,1L)).thenReturn(1L);
+        when(db.queryForObject("SELECT COALESCE(SUM(actual_total),0) FROM order_products WHERE order_no=? AND active=1 AND production_confirmed=1",BigDecimal.class,1L)).thenReturn(n("0"));
+        service.save(1,10,new WorkshopService.Correction(7,n("300"),n("400"),"Уточнено витрату",List.of(new ProductionService.Actual(1,n("3"),n("300"),n("400")))),auth);
+        verify(reservations).productionDemand(10,100,n("3"),"master");
+        verify(reservations).refillPart(100,"master");
+        verify(db,never()).update(startsWith("UPDATE parts SET OnHand"),any(Object[].class));
+        verify(db,never()).update(startsWith("INSERT INTO inventory_movements"),any(Object[].class));
+    }
     @Test void measurementsRequireOnlyTheSelectedProductsLines() {
         var wrong=new ProductionService.Actual(999,n("1"),null,null);
         assertThrows(PreviewException.class,()->service.save(1,10,new WorkshopService.Correction(7,n("300"),n("400"),"Переміряв",List.of(wrong)),auth));
