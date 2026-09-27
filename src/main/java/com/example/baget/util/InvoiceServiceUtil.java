@@ -192,11 +192,22 @@ public class InvoiceServiceUtil {
         return LocalDate.of(year, month, day);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate numberingDb;
+
+    @org.springframework.transaction.annotation.Transactional
     public Long generateTodayCode() {
+        var counter=numberingDb.queryForMap("SELECT day_key,last_no FROM invoice_number_lock WHERE id=1 FOR UPDATE");
         LocalDate today = LocalDate.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("ddMMyyyy");
         String result = today.format(formatter) + "001";
-        return Long.parseLong(result);
+        long first=Long.parseLong(result);
+        String day=today.format(formatter);
+        long last=day.equals(counter.get("day_key")) ? ((Number)counter.get("last_no")).longValue()
+                : numberingDb.queryForObject("SELECT GREATEST(COALESCE((SELECT MAX(invoice_no) FROM invoices WHERE invoice_no BETWEEN ? AND ?),?),COALESCE((SELECT MAX(RahFacNo) FROM orders WHERE RahFacNo BETWEEN ? AND ?),?))",Long.class,first,first+998,first-1,first,first+998,first-1);
+        if(last>=first+998) throw new TransactionException("Вичерпано денний діапазон номерів рахунків");
+        numberingDb.update("UPDATE invoice_number_lock SET day_key=?,last_no=? WHERE id=1",day,last+1);
+        return last+1;
     }
 
 }

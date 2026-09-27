@@ -72,7 +72,7 @@ public class WorkshopService {
         if(Set.of(5,10).contains(v.status())) throw conflict("Виконання замовлення припинено");
         if(Boolean.TRUE.equals(db.queryForObject("SELECT production_finalized FROM orders WHERE OrderNo=?",Boolean.class,id)))
             throw conflict("Витрати замовлення вже підтверджені");
-        if(db.queryForObject("SELECT COUNT(*) FROM invoice_orders WHERE order_no=?",Long.class,id)>0)
+        if(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,id)>0)
             throw conflict("Для замовлення вже оформлено рахунок. Потрібне окреме узгодження");
         var product=v.products().stream().filter(p->p.id()==pid).findFirst().orElseThrow(()->conflict("Виріб не належить цьому замовленню або вже неактивний"));
         if(product.confirmed()) throw conflict("Виріб завершено. Підтверджений розрахунок захищено від змін");

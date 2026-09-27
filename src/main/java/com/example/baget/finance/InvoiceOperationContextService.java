@@ -68,7 +68,7 @@ public class InvoiceOperationContextService {
 
     private void validateBranchAccess(User user, Long branchNo) {
 
-        boolean allowed = user.getAllowedBranches()
+        boolean allowed = user.getRoles().stream().anyMatch(r->r.getName().equals("ROLE_ADMIN")) || user.getAllowedBranches()
                 .stream()
                 .anyMatch(b -> b.getBranchNo().equals(branchNo));
 

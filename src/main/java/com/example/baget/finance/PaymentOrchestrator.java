@@ -61,6 +61,19 @@ public class PaymentOrchestrator {
         return txs.stream().map(customerTransactionMapper::toDTO).toList();
     }
 
+    /** Invoice processors create UI transactions; only this method posts their financial entries. */
+    @Transactional
+    public void postInvoiceTransactions(List<CustomerTransaction> transactions, User user, com.example.baget.customer.Customer payer) {
+        for(var tx:transactions) {
+            if(!java.util.Set.of(CustomerTransactionType.INVOICE,CustomerTransactionType.INVOICE_MERGE_IN,CustomerTransactionType.INVOICE_MERGE_OUT).contains(tx.getType())
+                || tx.getInvoice()==null || tx.getId()==null || tx.getAmount()==null || tx.getAmount().signum()==0)
+                throw new IllegalArgumentException("Invalid invoice posting");
+            ledgerService.createEntry(new LedgerRequest(tx.getBranch(),tx.getType().getDirection(),tx.getType().getLedgerCategory(),
+                tx.getAmount().abs(),tx.getCreatedAt(),user,tx.getCustomer().getCustNo(),tx.getId(),payer,tx.getInvoice().getId(),
+                "INV-"+tx.getInvoice().getInvoiceNo(),tx.getNote()));
+        }
+    }
+
     private LedgerRequest buildLedgerRequest(
             InvoiceOperationContext ctx,
             CustomerTransaction tx,

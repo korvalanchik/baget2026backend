@@ -35,6 +35,8 @@ public class CustomerService {
     private final UsersRepository usersRepository;
     private final InvoiceRepository invoiceRepository;
     private final CustomerMapper customerMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate billingDb;
 
     public List<CustomerDTO> findAll() {
         final List<Customer> customers = customerRepository.findAll(Sort.by("custNo"));
@@ -107,7 +109,15 @@ public class CustomerService {
 
 
     public List<CustomerInvoiceDTO> getInvoicesByCustomer(Long custNo) {
-        return invoiceRepository.findInvoicesByCustomer(custNo);
+        var productInvoiceIds = new java.util.HashSet<>(billingDb.queryForList(
+                "SELECT DISTINCT ip.invoice_id FROM invoice_products ip JOIN invoices i ON i.id=ip.invoice_id WHERE i.customer_id=?",
+                Long.class, custNo));
+        return invoiceRepository.findInvoicesByCustomer(custNo).stream().map(dto -> {
+            if (!productInvoiceIds.contains(dto.id())) return dto;
+            BigDecimal debt = invoiceRepository.calculateInvoiceDebt(dto.id()).max(BigDecimal.ZERO);
+            return new CustomerInvoiceDTO(dto.id(), dto.invoiceNo(), dto.total(),
+                    dto.total().subtract(debt), debt, dto.createdAt());
+        }).toList();
     }
 
     public List<CustomerSelectDTO> getCustomersForInvoice() {

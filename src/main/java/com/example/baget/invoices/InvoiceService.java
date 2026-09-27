@@ -64,6 +64,8 @@ public class InvoiceService {
             throw new TransactionException("Список інвойсів містить дублікати");
         }
 
+        for(Long id:invoiceIds) if(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,id)>0)
+            throw new TransactionException("Рахунки за виробами об’єднуються в розділі бухгалтера");
         for(Long id:new java.util.TreeSet<>(invoiceIds))
             db.queryForObject("SELECT id FROM invoices WHERE id=? FOR UPDATE",Long.class,id);
         var lockedOrders=new java.util.TreeSet<Long>();
@@ -314,6 +316,8 @@ public class InvoiceService {
 
     @Transactional
     public InvoiceViewDTO getInvoice(Long invoiceId) {
+        if(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,invoiceId)>0)
+            throw new TransactionException("Склад цього рахунку доступний у розділі бухгалтера: рахунки за виробами");
 
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() ->
@@ -453,6 +457,8 @@ public class InvoiceService {
                 .findByInvoiceNoAndLifecycle(invoiceNo, InvoiceEnums.InvoiceLifecycle.ACTIVE)
                 .orElseThrow(() -> new TransactionException("Invoice " + invoiceNo + " not found"));
 
+        if(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,invoice.getId())>0)
+            throw new TransactionException("Розрахунки за виробами доступні в розділі бухгалтера");
         // 2️⃣ InvoiceOrders
         List<InvoiceOrder> invoiceOrders =
                 invoiceOrderRepository.findByInvoice_Id(invoice.getId());

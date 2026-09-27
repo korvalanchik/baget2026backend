@@ -36,7 +36,7 @@ class WorkshopServiceTest {
         service=spy(new WorkshopService(db,mock(CalculatedOrderService.class),mock(ProductionService.class),reservations,users,new ObjectMapper()));
         when(db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,1L)).thenReturn(List.of(1L));
         when(db.queryForObject("SELECT production_finalized FROM orders WHERE OrderNo=?",Boolean.class,1L)).thenReturn(false);
-        when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders WHERE order_no=?",Long.class,1L)).thenReturn(0L);
+        when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,1L)).thenReturn(0L);
         setView(false);
     }
     @Test void staleRevisionStopsBeforeTakingOverOrPosting() {

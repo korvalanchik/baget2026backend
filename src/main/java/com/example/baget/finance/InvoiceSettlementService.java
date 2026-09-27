@@ -25,6 +25,8 @@ public class InvoiceSettlementService {
     private final UsersRepository usersRepository;
     private final org.springframework.jdbc.core.JdbcTemplate db;
     private final jakarta.persistence.EntityManager em;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.baget.billing.BillingAccess productBillingAccess;
     private void lockContext(InvoiceOperationContext ctx) {
         db.queryForObject("SELECT CustNo FROM customer WHERE CustNo=? FOR UPDATE",Long.class,ctx.debtor().getCustNo());
         if(ctx.invoice()!=null) {
@@ -49,6 +51,11 @@ public class InvoiceSettlementService {
                 .orElseThrow(() -> new TransactionException("Користувач не знайдений: " + username));
 
         InvoiceOperationContext ctx = invoiceOperationContextService.resolveContext(request, user);
+        if(ctx.invoice()!=null && db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,ctx.invoice().getId())>0) {
+            productBillingAccess.invoice(productBillingAccess.user(authentication),ctx.invoice().getId());
+            for(var value:java.util.List.of(Optional.ofNullable(request.amount()).orElse(BigDecimal.ZERO),Optional.ofNullable(request.allocationAmount()).orElse(BigDecimal.ZERO)))
+                if(value.signum()<0 || value.stripTrailingZeros().scale()>2) throw new TransactionException("Суми платежу та авансу мають бути невід'ємними, до двох знаків після коми");
+        }
         lockContext(ctx);
 
         List<CustomerTransactionDTO> result = new ArrayList<>();
@@ -79,6 +86,11 @@ public class InvoiceSettlementService {
                 .orElseThrow(() -> new TransactionException("Користувач не знайдений: " + username));
 
         InvoiceOperationContext ctx = invoiceOperationContextService.resolveContext(request, user);
+        if(ctx.invoice()!=null && db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,ctx.invoice().getId())>0) {
+            productBillingAccess.invoice(productBillingAccess.user(authentication),ctx.invoice().getId());
+            for(var value:java.util.List.of(Optional.ofNullable(request.amount()).orElse(BigDecimal.ZERO),Optional.ofNullable(request.allocationAmount()).orElse(BigDecimal.ZERO)))
+                if(value.signum()<0 || value.stripTrailingZeros().scale()>2) throw new TransactionException("Суми платежу та авансу мають бути невід'ємними, до двох знаків після коми");
+        }
         lockContext(ctx);
 
         return new ArrayList<>(paymentOrchestrator.processPayment(ctx, request, user));
