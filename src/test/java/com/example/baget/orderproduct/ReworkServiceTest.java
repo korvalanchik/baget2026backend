@@ -63,9 +63,9 @@ class ReworkServiceTest {
         assertTrue(mutatingSql().isEmpty());
     }
     @Test void staleRevisionAndBranchDenialCannotWrite() {
-        assertThrows(PreviewException.class,()->service.open(1,10,new ReworkService.Open(6,ReworkRules.ChargeMode.CUSTOMER,"Зміна"),auth));
+        assertThrows(PreviewException.class,()->service.open(1,10,new ReworkService.Open(6,ReworkRules.ChargeMode.WORKSHOP,"Зміна"),auth));
         when(orders.read(1,auth)).thenThrow(new PreviewException(org.springframework.http.HttpStatus.FORBIDDEN,"BRANCH","Філія"));
-        assertThrows(PreviewException.class,()->service.open(1,10,new ReworkService.Open(7,ReworkRules.ChargeMode.CUSTOMER,"Зміна"),auth));
+        assertThrows(PreviewException.class,()->service.open(1,10,new ReworkService.Open(7,ReworkRules.ChargeMode.WORKSHOP,"Зміна"),auth));
         assertTrue(mutatingSql().isEmpty());
     }
     void active(String mode) {
@@ -114,5 +114,10 @@ class ReworkServiceTest {
     }
     private List<String> mutatingSql() {
         return mockingDetails(db).getInvocations().stream().filter(i->i.getMethod().getName().equals("update")).map(i->(String)i.getArgument(0)).toList();
+    }
+    @Test void newCustomerChangeRequiresNewOrderAndCannotWrite() {
+        assertThrows(com.example.baget.calculation.preview.PreviewException.class,
+            () -> service.open(1,10,new ReworkService.Open(3,ReworkRules.ChargeMode.CUSTOMER,"Заміна багету"),auth));
+        verify(db,never()).update(anyString(),any(Object[].class));
     }
 }
