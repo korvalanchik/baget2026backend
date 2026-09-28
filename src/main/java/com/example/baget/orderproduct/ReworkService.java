@@ -125,7 +125,9 @@ public class ReworkService {
         return db.queryForList("SELECT PartNo AS partNo,Description AS description,unit_type AS unit,part_kind AS kind FROM parts WHERE part_kind IN ('MATERIAL','WORK') AND unit_type IN ('METER','SQUARE_METER','PIECE') AND calculation_method IS NOT NULL AND calculation_params IS NOT NULL AND (LOCATE(?,Description)>0 OR LOCATE(?,CAST(PartNo AS CHAR))>0) ORDER BY PartNo LIMIT 30",term,term);
     }
     public void open(long orderNo,long pid,Open r,Authentication a) {
-        validate(r);var p=lock(orderNo,pid,r.expectedRevision(),a);
+        validate(r);foreman(a);
+        if(r.chargeMode()==ChargeMode.CUSTOMER) throw conflict("Зміни клієнта після початку роботи оформлюються новим замовленням");
+        var p=lock(orderNo,pid,r.expectedRevision(),a);
         if(!ReworkRules.canOpen(yes(p.get("production_confirmed")),(String)p.get("production_state"),
                 (String)p.get("current_location"),(String)p.get("pending_location"),false,p.get("active_rework_id")!=null))
             throw conflict("Поверніть завершений виріб до майстерні та підтвердьте приймання. Передача має бути завершена");
