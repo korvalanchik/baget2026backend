@@ -68,4 +68,12 @@ class ProcurementServiceTest {
     }
     @Test void closedRemainderNeverReturnsReceivedStock(){header.put("status","PARTIAL");service.close(9,new ProcurementService.Action(3,"Недопоставка"),auth);verify(db).update("UPDATE supplier_orders SET status=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?","CLOSED",9L);verifyNoInteractions(reserves);verify(db,never()).update(startsWith("UPDATE parts"),any(Object[].class));}
     @Test void draftNeedsDateBeforeOrdering(){header.put("status","DRAFT");header.put("expectedDate",null);assertThrows(PreviewException.class,()->service.place(9,new ProcurementService.Action(3,"Замовлено"),auth));verify(db,never()).update(anyString(),any(Object[].class));}
+    @Test void blockedProfileCannotBeOrderedButExistingSupplyCanBeReceived() {
+        header.put("status","DRAFT");
+        when(db.queryForList("SELECT status FROM frame_purchase_policy WHERE part_no=?",String.class,10L)).thenReturn(List.of("BLOCKED"));
+        assertThrows(PreviewException.class,()->service.place(9,new ProcurementService.Action(3,"Замовлено"),auth));
+        verify(db,never()).update(anyString(),any(Object[].class));
+        header.put("status","ORDERED");service.receive(9,receipt(3,qty(1,"3")),auth);
+        verify(db).update("UPDATE parts SET OnHand=?,Version=COALESCE(Version,0)+1 WHERE PartNo=?",n("8"),10L);
+    }
 }

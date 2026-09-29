@@ -16,6 +16,11 @@ public final class ProcurementRules {
         return new Need(stock.subtract(reserved),shortage,projected,low,
             projected.signum()<0 || low ? target.subtract(projected).max(BigDecimal.ZERO) : BigDecimal.ZERO);
     }
+    public static Need assortmentNeed(BigDecimal stock,BigDecimal demand,BigDecimal reserved,BigDecimal incoming,
+            BigDecimal minimum,BigDecimal target,boolean frame,long activeBranches) {
+        boolean replenish=!frame || activeBranches>0;
+        return need(stock,demand,reserved,incoming,replenish?minimum:BigDecimal.ZERO,replenish?target:BigDecimal.ZERO);
+    }
     public static void quantity(String unit,BigDecimal value,boolean zeroAllowed) {
         if(value==null || value.signum()<0 || (!zeroAllowed && value.signum()==0)
             || value.compareTo(new BigDecimal("999999999"))>0 || value.stripTrailingZeros().scale()>6

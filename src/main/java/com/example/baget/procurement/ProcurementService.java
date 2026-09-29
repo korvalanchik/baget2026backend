@@ -52,7 +52,9 @@ public class ProcurementService {
         COALESCE(i.incoming,0) AS incoming,i.expectedDate,i.overdue,
         COALESCE(s.minimum_qty,0) AS minimum,COALESCE(s.target_qty,0) AS target,
         COALESCE(s.revision,0) AS policyRevision,
-        COALESCE(l.legacyOrdered,0) AS legacyOrdered
+        COALESCE(l.legacyOrdered,0) AS legacyOrdered,
+        CASE WHEN p.calculation_method='FRAME_PROFILE' OR (p.InQuality=2 AND p.ProfilWidth>0.0003) THEN 1 ELSE 0 END AS frameProfile,
+        COALESCE(fs.activeBranches,0) AS activeBranches,COALESCE(fp.status,'ALLOWED') AS purchaseStatus
         FROM parts p LEFT JOIN vendors v ON v.VendorNo=p.VendorNo
         LEFT JOIN (SELECT part_no,SUM(demand) AS demand,SUM(reserved) AS reserved
           FROM material_reservations WHERE active=1 GROUP BY part_no) r ON r.part_no=p.PartNo
@@ -62,6 +64,8 @@ public class ProcurementService {
           FROM supplier_order_lines l JOIN supplier_orders o ON o.id=l.order_id
           WHERE o.status IN ('ORDERED','PARTIAL') AND l.received_qty<l.ordered_qty GROUP BY l.part_no) i ON i.part_no=p.PartNo
         LEFT JOIN material_stock_policy s ON s.part_no=p.PartNo
+        LEFT JOIN (SELECT part_no,COUNT(*) AS activeBranches FROM branch_frame_samples WHERE status='ACTIVE' GROUP BY part_no) fs ON fs.part_no=p.PartNo
+        LEFT JOIN frame_purchase_policy fp ON fp.part_no=p.PartNo
         LEFT JOIN (SELECT part_no,SUM(quantity) AS legacyOrdered FROM material_purchase_requests
           WHERE status='ORDERED' GROUP BY part_no) l ON l.part_no=p.PartNo
         WHERE p.part_kind='MATERIAL'
@@ -69,14 +73,19 @@ public class ProcurementService {
     public List<Map<String,Object>> needs(String q,int page,boolean onlyNeeded,Authentication a) {
         access(a);
         // Filtering is in SQL before paging. Unknown stock needs a count, not an invented zero balance.
-        String filter=onlyNeeded?" AND (p.OnHand IS NULL OR COALESCE(r.demand,0)>COALESCE(r.reserved,0) OR p.OnHand+COALESCE(i.incoming,0)-COALESCE(r.demand,0)<COALESCE(s.minimum_qty,0))":"";
+        String filter=onlyNeeded?" AND (p.OnHand IS NULL OR COALESCE(r.demand,0)>COALESCE(r.reserved,0) OR p.OnHand+COALESCE(i.incoming,0)-COALESCE(r.demand,0)<CASE WHEN (p.calculation_method='FRAME_PROFILE' OR (p.InQuality=2 AND p.ProfilWidth>0.0003)) AND COALESCE(fs.activeBranches,0)=0 THEN 0 ELSE COALESCE(s.minimum_qty,0) END)":"";
         var rows=db.queryForList(NEEDS+" AND (LOCATE(?,p.Description)>0 OR LOCATE(?,CAST(p.PartNo AS CHAR))>0)"+filter+" ORDER BY p.PartNo LIMIT 100 OFFSET ?",q,q,Math.max(0,Math.min(page,100000))*100);
         rows.forEach(this::calculateNeed);return rows;
     }
     private void calculateNeed(Map<String,Object> row) {
-        var need=ProcurementRules.need(decimal(row,"onHand"),decimal(row,"demand"),decimal(row,"reserved"),decimal(row,"incoming"),decimal(row,"minimum"),decimal(row,"target"));
+        boolean frame=((Number)row.get("frameProfile")).intValue()==1;
+        long active=((Number)row.get("activeBranches")).longValue();
+        var need=ProcurementRules.assortmentNeed(decimal(row,"onHand"),decimal(row,"demand"),decimal(row,"reserved"),decimal(row,"incoming"),decimal(row,"minimum"),decimal(row,"target"),frame,active);
+        row.put("replenishStock",!frame || active>0);
+        row.put("purchaseBlocked",!"ALLOWED".equals(row.get("purchaseStatus")));
+        row.put("requiredPurchase",need.recommended());
         row.put("free",need.free());row.put("shortage",need.shortage());row.put("projectedFree",need.projectedFree());
-        row.put("low",need.low());row.put("recommended",need.recommended());
+        row.put("low",need.low());row.put("recommended",Boolean.TRUE.equals(row.get("purchaseBlocked"))?BigDecimal.ZERO:need.recommended());
     }
     public Map<String,Object> need(long part,Authentication a) {
         access(a);var row=db.queryForMap(NEEDS+" AND p.PartNo=?",part);calculateNeed(row);
@@ -130,7 +139,7 @@ public class ProcurementService {
         var lines=lines(id);
         if(lines.isEmpty()) throw conflict("Додайте матеріали");
         reservations.lockParts(lines.stream().map(l->number(l,"partNo")).toList());
-        for(var l:lines) {var p=part(number(l,"partNo"),false);quantity(p,decimal(l,"ordered"),false);if(!Objects.equals(p.get("unit"),l.get("unit")))throw conflict("Одиниця матеріалу змінилась. Перезбережіть чернетку");}
+        for(var l:lines) {var p=part(number(l,"partNo"),false);purchasable(number(l,"partNo"));quantity(p,decimal(l,"ordered"),false);if(!Objects.equals(p.get("unit"),l.get("unit")))throw conflict("Одиниця матеріалу змінилась. Перезбережіть чернетку");}
         state(id,"ORDERED");event(id,null,"ORDERED",r,a);return read(id,a);
     }
     public Map<String,Object> reschedule(long id,Schedule r,Authentication a) {
@@ -191,7 +200,11 @@ public class ProcurementService {
         if(db.queryForList("SELECT VendorNo FROM vendors WHERE VendorNo=?",Long.class,r.vendorNo()).isEmpty())throw conflict("Оберіть постачальника з довідника");
         var ids=new TreeSet<Long>();for(var l:r.lines())if(!ids.add(l.partNo()))throw conflict("Матеріал повторюється в замовленні");
         reservations.lockParts(ids);var result=new HashMap<Long,Map<String,Object>>();
-        for(var l:r.lines()){var p=part(l.partNo(),false);quantity(p,l.quantity(),false);result.put(l.partNo(),p);}return result;
+        for(var l:r.lines()){var p=part(l.partNo(),false);purchasable(l.partNo());quantity(p,l.quantity(),false);result.put(l.partNo(),p);}return result;
+    }
+    private void purchasable(long part) {
+        var statuses=db.queryForList("SELECT status FROM frame_purchase_policy WHERE part_no=?",String.class,part);
+        if(!statuses.isEmpty() && !"ALLOWED".equals(statuses.get(0)))throw conflict("Закупівлю профілю "+part+" заборонено або його знято з виробництва. Узгодьте заміну");
     }
     private void insertLines(long id,Draft r,Map<Long,Map<String,Object>> parts) {
         for(var l:r.lines()){var p=parts.get(l.partNo());db.update("INSERT INTO supplier_order_lines(order_id,part_no,description,unit,ordered_qty) VALUES(?,?,?,?,?)",id,l.partNo(),Objects.toString(p.get("description"),""),p.get("unit"),l.quantity());}
