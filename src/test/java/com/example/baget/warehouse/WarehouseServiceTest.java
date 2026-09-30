@@ -22,6 +22,7 @@ class WarehouseServiceTest {
         var user=new User();var role=new Role();role.setName("ROLE_ADMIN");user.setRoles(List.of(role));user.setAllowedBranches(Set.of());
         when(users.findByUsername("admin")).thenReturn(Optional.of(user));auth=new UsernamePasswordAuthenticationToken("admin","",List.of());
         service=spy(new WarehouseService(db,users,reservations,new ObjectMapper(),reworks));
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"paymentCheck",mock(com.example.baget.finance.ProductPaymentCheck.class));
         when(db.queryForMap("SELECT CAST(OnHand AS DECIMAL(24,6)) AS stock,unit_type AS unit FROM parts WHERE PartNo=? AND part_kind='MATERIAL' FOR UPDATE",1L)).thenReturn(Map.of("stock",n("10"),"unit","METER"));
         when(db.queryForObject("SELECT COALESCE(SUM(reserved),0) FROM material_reservations WHERE part_no=? AND active=1",BigDecimal.class,1L)).thenReturn(n("6"));
         doReturn(Map.of()).when(service).material(1,auth);

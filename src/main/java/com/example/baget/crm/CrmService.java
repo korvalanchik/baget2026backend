@@ -41,6 +41,9 @@ public class CrmService {
  UNION
  SELECT COALESCE(i.payer_id,i.customer_id),o.BranchNo FROM invoices i
  JOIN invoice_orders io ON io.invoice_id=i.id JOIN orders o ON o.OrderNo=io.order_no
+ UNION
+ SELECT i.customer_id,o.BranchNo FROM invoices i
+ JOIN invoice_orders io ON io.invoice_id=i.id JOIN orders o ON o.OrderNo=io.order_no
  """;
  private static final String ORDER_STATE = """
  SELECT o.OrderNo,o.CustNo,o.BranchNo,
@@ -98,7 +101,9 @@ public class CrmService {
   var args=new HashMap<String,Object>();args.put("branches",allowed);args.put("q",q.trim());args.put("digits",q.matches("[+()\\s0-9-]+")?q.replaceAll("[^0-9]",""):"");
   args.put("due",due?1:0);args.put("today",LocalDate.now(java.time.ZoneId.of("Europe/Kyiv")));args.put("offset",page*50);
   var rows=named.queryForList(sql,args);
-  return Map.of("rows",rows.subList(0,Math.min(50,rows.size())),"hasMore",rows.size()>50);
+  var visible=rows.subList(0,Math.min(50,rows.size()));
+  for(var row:visible)row.put("pickupOrders",pickupOrders(((Number)row.get("customerId")).longValue(),((Number)row.get("branchNo")).longValue()));
+  return Map.of("rows",visible,"hasMore",rows.size()>50);
  }
  private void customer(long id,long branch,Authentication a) {
   if(!access(a).contains(branch))throw fail(HttpStatus.FORBIDDEN,"Цю філію не дозволено");
@@ -109,6 +114,7 @@ public class CrmService {
   customer(id,branch,a);if(page<0||page>100000)throw fail(HttpStatus.BAD_REQUEST,"Некоректна сторінка");
   var out=new LinkedHashMap<String,Object>();
   out.put("profile",profile(id,branch));
+  out.put("pickupOrders",pickupOrders(id,branch));
   out.put("orders",db.queryForList("""
    SELECT o.OrderNo AS orderNo,o.StatusOrder AS status,o.SaleDate AS saleDate,
    p.id AS productId,p.client_product_id AS productName,p.production_state AS state,
@@ -122,7 +128,7 @@ public class CrmService {
    WHERE (i.customer_id=? OR i.payer_id=?) AND o.BranchNo=? ORDER BY i.id DESC LIMIT 201
    """,id,id,branch));
   var events=db.queryForList("""
-   SELECT e.id,e.outcome,e.note,e.order_no AS orderNo,e.invoice_id AS invoiceId,i.invoice_no AS invoiceNo,e.next_contact_date AS nextContactDate,
+   SELECT e.id,e.outcome,e.note,e.order_no AS orderNo,e.invoice_id AS invoiceId,i.invoice_no AS invoiceNo,e.next_contact_date AS nextContactDate,e.pickup_date AS pickupDate,
    e.actor,e.created_at AS createdAt FROM crm_contacts e LEFT JOIN invoices i ON i.id=e.invoice_id
    WHERE e.customer_id=? AND e.branch_no=? ORDER BY e.id DESC LIMIT 51 OFFSET ?
    """,id,branch,page*50);
@@ -190,6 +196,96 @@ public class CrmService {
    INSERT INTO crm_contacts(request_key,request_json,customer_id,branch_no,outcome,note,order_no,invoice_id,next_contact_date,actor)
    VALUES(?,?,?,?,?,?,?,?,?,?)
    """,key,json.valueToTree(request).toString(),id,branch,outcome,note,order,invoice,next,a.getName());
+ }
+ public record Pickup(@NotBlank @Size(max=36) String requestKey,@Min(0) long expectedRevision,
+   @NotBlank String readySignature,@NotBlank String outcome,@NotNull @Size(max=2000) String note,LocalDate pickupDate) {}
+ public Object pickup(long id,long branch,long order,Pickup r,Authentication a) {
+  customer(id,branch,a);lock(id);
+  if(retry(r.requestKey(),r,id,branch,a)) {
+   var old=db.queryForMap("SELECT order_no FROM crm_contacts WHERE request_key=?",r.requestKey());
+   if(((Number)old.get("order_no")).longValue()!=order)throw fail(HttpStatus.CONFLICT,"Ключ використано для іншого замовлення");
+   return detail(id,branch,0,a);
+  }
+  if(!Set.of("PICKUP_NOTIFIED","PICKUP_NO_ANSWER","PICKUP_AGREED","PICKUP_CLEAR").contains(r.outcome()))
+   throw fail(HttpStatus.BAD_REQUEST,"Невідома дія видачі");
+  if("PICKUP_AGREED".equals(r.outcome())&&r.pickupDate()==null)
+   throw fail(HttpStatus.BAD_REQUEST,"Вкажіть обіцяну дату отримання");
+  if(!"PICKUP_AGREED".equals(r.outcome())&&r.pickupDate()!=null)
+   throw fail(HttpStatus.BAD_REQUEST,"Дата отримання задається лише для домовленості");
+  if(r.pickupDate()!=null&&(r.pickupDate().getYear()<1000||r.pickupDate().getYear()>9999))
+   throw fail(HttpStatus.BAD_REQUEST,"Некоректна дата");
+  var match=db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? AND CustNo=? AND BranchNo=? FOR UPDATE",order,id,branch);
+  if(match.isEmpty())throw fail(HttpStatus.NOT_FOUND,"Замовлення не належить клієнту та філії");
+  var item=pickupOrders(id,branch).stream().filter(o->((Number)o.get("orderNo")).longValue()==order).findFirst()
+    .orElseThrow(()->fail(HttpStatus.CONFLICT,"Готових невиданих виробів уже немає. Оновіть картку"));
+  if(((Number)item.get("revision")).longValue()!=r.expectedRevision()||!item.get("readySignature").equals(r.readySignature()))
+   throw fail(HttpStatus.CONFLICT,"Готовність або домовленість змінилася. Оновіть картку");
+  db.update("INSERT IGNORE INTO crm_order_pickup(order_no) VALUES(?)",order);
+  event(id,branch,r.requestKey(),r,r.outcome(),r.note().trim(),order,null,null,a);
+  Long eventId=db.queryForObject("SELECT id FROM crm_contacts WHERE request_key=?",Long.class,r.requestKey());
+  Object date="PICKUP_AGREED".equals(r.outcome())?r.pickupDate():"PICKUP_CLEAR".equals(r.outcome())?null:item.get("pickupDate");
+  db.update("UPDATE crm_contacts SET pickup_date=?,ready_snapshot=? WHERE id=?",date,json.valueToTree(item.get("readyKeys")).toString(),eventId);
+  boolean notified=Set.of("PICKUP_NOTIFIED","PICKUP_AGREED").contains(r.outcome());
+  db.update("UPDATE crm_order_pickup SET revision=revision+1,pickup_date=?,last_event_id=?,notified_event_id=CASE WHEN ? THEN ? ELSE notified_event_id END WHERE order_no=?",date,eventId,notified,eventId,order);
+  return detail(id,branch,0,a);
+ }
+ List<Map<String,Object>> pickupOrders(long id,long branch) {
+  var rows=db.queryForList("""
+   SELECT o.OrderNo AS orderNo,o.StatusOrder AS orderStatus,p.id AS productId,p.production_state AS state,
+   p.current_location AS location,p.pending_location AS pending,p.completed_at AS completedAt,
+   p.production_revision AS productionRevision,p.tracking_revision AS trackingRevision,
+   COALESCE(cp.revision,0) AS revision,cp.pickup_date AS pickupDate,
+   le.outcome AS lastOutcome,le.ready_snapshot AS lastSnapshot,ne.ready_snapshot AS notifiedSnapshot
+   FROM orders o LEFT JOIN order_products p ON p.order_no=o.OrderNo AND p.active=1
+   LEFT JOIN crm_order_pickup cp ON cp.order_no=o.OrderNo
+   LEFT JOIN crm_contacts le ON le.id=cp.last_event_id
+   LEFT JOIN crm_contacts ne ON ne.id=cp.notified_event_id
+   WHERE o.CustNo=? AND o.BranchNo=? AND o.StatusOrder NOT IN (5,10)
+   AND (EXISTS(SELECT 1 FROM order_products rp WHERE rp.order_no=o.OrderNo AND rp.active=1
+     AND rp.production_state='COMPLETED' AND rp.current_location<>'CUSTOMER')
+    OR (NOT EXISTS(SELECT 1 FROM order_products ap WHERE ap.order_no=o.OrderNo AND ap.active=1)
+     AND o.StatusOrder IN (3,4,6,7,8,9,11)))
+   ORDER BY o.OrderNo DESC,p.id
+   """,id,branch);
+  var grouped=new LinkedHashMap<Long,List<Map<String,Object>>>();
+  for(var row:rows)grouped.computeIfAbsent(((Number)row.get("orderNo")).longValue(),k->new ArrayList<>()).add(row);
+  var result=new ArrayList<Map<String,Object>>();
+  for(var entry:grouped.entrySet()) {
+   var first=entry.getValue().get(0);var keys=new TreeSet<String>();var signature=new ArrayList<String>();
+   int branchReady=0,working=0;boolean legacy=first.get("productId")==null;
+   var places=new TreeSet<String>();
+   for(var row:entry.getValue()) {
+    if(row.get("productId")==null){keys.add("legacy:"+entry.getKey());places.add("UNKNOWN");signature.add("legacy:"+row.get("orderStatus"));continue;}
+    signature.add(row.get("productId")+":"+row.get("state")+":"+row.get("productionRevision")+":"+row.get("trackingRevision"));
+    if(!"COMPLETED".equals(row.get("state"))){if(!"STOPPED".equals(row.get("state"))&&!"CUSTOMER".equals(row.get("location")))working++;continue;}
+    if("CUSTOMER".equals(row.get("location")))continue;
+    // Completion timestamp changes on another production/rework cycle; moving the same product does not.
+    keys.add(row.get("productId")+":"+Objects.toString(row.get("completedAt"),"revision:"+row.get("productionRevision")));
+    places.add(Objects.toString(row.get("location"),"UNKNOWN")+(row.get("pending")==null?"":" → "+row.get("pending")));
+    if("BRANCH".equals(row.get("location"))&&row.get("pending")==null)branchReady++;
+   }
+   if(keys.isEmpty())continue;
+   var notified=snapshot(first.get("notifiedSnapshot"));var last=snapshot(first.get("lastSnapshot"));
+   var date=first.get("pickupDate")==null?null:LocalDate.parse(first.get("pickupDate").toString());
+   var out=new LinkedHashMap<String,Object>();
+   out.put("orderNo",entry.getKey());out.put("revision",first.get("revision"));out.put("readyKeys",keys);
+   out.put("readySignature",hashPickup(signature));out.put("readyCount",legacy?null:keys.size());out.put("branchReady",branchReady);
+   out.put("workingCount",working);out.put("legacy",legacy);out.put("places",places);out.put("pickupDate",date);
+   out.put("pickupOverdue",date!=null&&date.isBefore(LocalDate.now(java.time.ZoneId.of("Europe/Kyiv"))));
+   out.put("needsNotice",PickupRules.needsNotice(keys,notified));
+   out.put("pickupStatus",PickupRules.status(keys,notified,last,Objects.toString(first.get("lastOutcome"),""),date,LocalDate.now(java.time.ZoneId.of("Europe/Kyiv"))));
+   result.add(out);
+  }
+  return result;
+ }
+ private Set<String> snapshot(Object raw) {
+  if(raw==null)return Set.of();
+  try {var result=new HashSet<String>();for(var n:json.readTree(raw.toString()))result.add(n.asText());return result;}
+  catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}
+ }
+ private String hashPickup(List<String> state) {
+  try{return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(String.join("|",state).getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+  catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
  }
  private PreviewException fail(HttpStatus status,String message){return new PreviewException(status,"CRM_ERROR",message);}
 }

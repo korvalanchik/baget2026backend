@@ -16,6 +16,8 @@ import java.util.*;
 @Service
 @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
 public class WarehouseService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.baget.finance.ProductPaymentCheck paymentCheck;
     private final JdbcTemplate db;
     private final UsersRepository users;
     private final InventoryReservations reservations;
@@ -37,7 +39,7 @@ public class WarehouseService {
         if(!roles.contains("ROLE_ADMIN") && users.findByUsername(a.getName()).orElseThrow().getAllowedBranches().stream().noneMatch(b->b.getName().equals(p.get("branchName")))) throw denied();
     }
     private Map<String,Object> product(String token,boolean lock) {
-        var rows=db.queryForList("SELECT p.id,p.order_no AS orderNo,p.client_product_id AS productName,p.production_state AS state,p.production_confirmed AS confirmed,p.current_location AS location,p.pending_location AS pending,p.tracking_revision AS revision,p.tracking_id AS trackingId,p.transfer_actor AS transferActor,p.warehouse_received_at AS warehouseReceivedAt,b.BranchName AS branchName FROM order_products p JOIN orders o ON o.OrderNo=p.order_no JOIN branches b ON b.BranchNo=o.BranchNo WHERE p.tracking_id=? AND p.active=1"+(lock?" FOR UPDATE":""),token);
+        var rows=db.queryForList("SELECT p.id,p.order_no AS orderNo,o.StatusOrder AS orderStatus,p.client_product_id AS productName,p.production_state AS state,p.production_confirmed AS confirmed,p.current_location AS location,p.pending_location AS pending,p.tracking_revision AS revision,p.tracking_id AS trackingId,p.transfer_actor AS transferActor,p.warehouse_received_at AS warehouseReceivedAt,b.BranchName AS branchName FROM order_products p JOIN orders o ON o.OrderNo=p.order_no JOIN branches b ON b.BranchNo=o.BranchNo WHERE p.tracking_id=? AND p.active=1"+(lock?" FOR UPDATE":""),token);
         if(rows.isEmpty()) throw new PreviewException(HttpStatus.NOT_FOUND,"PRODUCT_NOT_FOUND","Виріб не знайдено");
         return rows.get(0);
     }
@@ -49,6 +51,7 @@ public class WarehouseService {
         p.put("canReceiveWorkshop",!Collections.disjoint(r,Set.of("ROLE_ADMIN","ROLE_FOREMAN")));
         p.put("canReturnWorkshop",Set.of("WAREHOUSE","BRANCH").contains(p.get("location"))
             && !reworks.invoiced(((Number)p.get("orderNo")).longValue(),((Number)p.get("id")).longValue()));
+        p.put("payment",paymentCheck.read(((Number)p.get("id")).longValue()));
         return p;
     }
     public String trackingForProduct(long pid,Authentication a) {
@@ -71,12 +74,18 @@ public class WarehouseService {
     public record Transfer(@PositiveOrZero long expectedRevision,@NotBlank String destination,@Size(max=1000) String note) {}
     public Map<String,Object> transfer(String token,Transfer r,boolean accept,Authentication a) {
         var initial=product(token,false);productAccess(initial,a);
+        Long paymentInvoice="CUSTOMER".equals(r.destination())?paymentCheck.lock(((Number)initial.get("id")).longValue()):null;
         db.queryForObject("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,initial.get("orderNo"));
         var p=product(token,true);productAccess(p,a);
         if(((Number)p.get("revision")).longValue()!=r.expectedRevision()) throw conflict("Картка змінилася. Оновіть її");
         if(!"COMPLETED".equals(p.get("state"))) throw conflict("Спочатку завершіть виріб у майстерні");
         String from=(String)p.get("location"),to=r.destination();
         String pending=(String)p.get("pending");
+        Map<String,Object> creditSnapshot=Map.of();
+        if("CUSTOMER".equals(to)) {
+            if(p.get("orderStatus") instanceof Number status && Set.of(5,10).contains(status.intValue())) throw conflict("Скасоване замовлення не можна видати клієнту");
+            creditSnapshot=paymentCheck.checkIssue(((Number)p.get("id")).longValue(),paymentInvoice);
+        }
         if("WORKSHOP".equals(to)) {
             if(reworks.invoiced(((Number)p.get("orderNo")).longValue(),((Number)p.get("id")).longValue()))
                 throw conflict("За виробом уже оформлено рахунок. Повернення після рахунку потребує фінансового коригування");
@@ -97,6 +106,7 @@ public class WarehouseService {
             if(!"BRANCH".equals(from)) stockAccess(a);
             db.update("UPDATE order_products SET pending_location=?,transfer_actor=?,tracking_revision=tracking_revision+1 WHERE id=?",to,a.getName(),p.get("id"));
         }
+        if("CUSTOMER".equals(to))paymentCheck.recordIssue(((Number)p.get("id")).longValue(),r.expectedRevision()+1,accept,a.getName(),creditSnapshot);
         db.update("INSERT INTO product_transfers(product_id,action,from_location,to_location,actor,note) VALUES(?,?,?,?,?,?)",p.get("id"),accept?"ACCEPT":"SEND",from,to,a.getName(),r.note());
         return tracking(token,a);
     }

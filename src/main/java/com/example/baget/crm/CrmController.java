@@ -20,6 +20,9 @@ public class CrmController {
   @Valid @RequestBody CrmService.Contact r,Authentication a){return service.contact(id,branch,r,a);}
  @PostMapping("/customers/{id}/branches/{branch}/partner") public Object partner(@PathVariable("id") long id,@PathVariable("branch") long branch,
   @Valid @RequestBody CrmService.Partner r,Authentication a){return service.partner(id,branch,r,a);}
+ @PostMapping("/customers/{id}/branches/{branch}/orders/{order}/pickup")
+ public Object pickup(@PathVariable("id") long id,@PathVariable("branch") long branch,@PathVariable("order") long order,
+  @Valid @RequestBody CrmService.Pickup r,Authentication a){return service.pickup(id,branch,order,r,a);}
  @ExceptionHandler(PreviewException.class) public ResponseEntity<?> fail(PreviewException e){return ResponseEntity.status(e.getStatus()).body(java.util.Map.of("message",e.getMessage()));}
  @ExceptionHandler(org.springframework.dao.DuplicateKeyException.class) public ResponseEntity<?> duplicate(){return ResponseEntity.status(409).body(java.util.Map.of("message","Ключ операції вже використано. Оновіть картку."));}
 }

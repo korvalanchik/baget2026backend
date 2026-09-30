@@ -39,6 +39,7 @@ public class CustomerPaymentService {
                 invoiceRepository.findActiveInvoices(customerId);
 
         List<CustomerInvoiceDTO> invoices = openInvoices.stream()
+                .filter(i -> i.getStatus()!=com.example.baget.invoices.InvoiceEnums.InvoiceStatus.CANCELLED && i.getStatus()!=com.example.baget.invoices.InvoiceEnums.InvoiceStatus.DRAFT)
                 .map(this::toInvoiceDto)
                 .filter(dto -> dto.debt().compareTo(BigDecimal.ZERO) > 0)
                 .toList();
