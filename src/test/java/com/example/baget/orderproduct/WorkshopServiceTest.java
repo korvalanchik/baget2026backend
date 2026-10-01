@@ -34,6 +34,7 @@ class WorkshopServiceTest {
         when(users.findByUsername("master")).thenReturn(Optional.of(user));
         auth=new UsernamePasswordAuthenticationToken("master","",List.of());
         service=spy(new WorkshopService(db,mock(CalculatedOrderService.class),mock(ProductionService.class),reservations,users,new ObjectMapper(),mock(ReworkService.class)));
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"commercial",mock(com.example.baget.commercial.CommercialService.class));
         when(db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,1L)).thenReturn(List.of(1L));
         when(db.queryForObject("SELECT production_finalized FROM orders WHERE OrderNo=?",Boolean.class,1L)).thenReturn(false);
         when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,1L)).thenReturn(0L);

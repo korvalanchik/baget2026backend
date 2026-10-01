@@ -19,6 +19,8 @@ import static com.example.baget.orderproduct.WorkshopRules.State;
 @Service
 @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
 public class WorkshopService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.baget.commercial.CommercialService commercial;
     private final JdbcTemplate db;
     private final CalculatedOrderService orders;
     private final ProductionService production;
@@ -86,6 +88,7 @@ public class WorkshopService {
         var p=locked(id,pid,r.expectedRevision(),auth);
         if(!WorkshopRules.transition(p.state(),r.state())) throw conflict("Недопустимий перехід стану виробу");
         if(WorkshopRules.needsReason(p.state(),r.state()) && (r.note()==null || r.note().isBlank())) throw conflict("Вкажіть причину призупинення або відновлення");
+        if(r.state()==State.IN_PROGRESS)commercial.requireReady(pid);
         db.update("UPDATE order_products SET production_state=? WHERE id=?",r.state().name(),pid);
         if(r.state()==State.ACCEPTED) db.update("UPDATE order_products SET current_location='WORKSHOP',assigned_master=?,accepted_at=CURRENT_TIMESTAMP(6) WHERE id=?",auth.getName(),pid);
         // Imported in-progress orders retain their previous state; first new action records the responsible master.
@@ -118,12 +121,14 @@ public class WorkshopService {
         for(long part:partIds)reservations.refillPart(part,auth.getName());
         db.update("UPDATE order_products SET measured_width_mm=?,measured_height_mm=?,workshop_note=?,assigned_master=COALESCE(assigned_master,?),accepted_at=COALESCE(accepted_at,CURRENT_TIMESTAMP(6)) WHERE id=?",
             r.widthMm(),r.heightMm(),r.note(),auth.getName(),pid);
+        commercial.measured(pid,auth.getName(),r.note());
         audit(id,pid,"CORRECTION",r.note(),auth);
         aggregate(id);
         return view(id,auth);
     }
     public View complete(long id,long pid,long revision,Authentication auth) {
         var p=locked(id,pid,revision,auth);
+        commercial.requireReady(pid);
         if(p.state()!=State.IN_PROGRESS) throw conflict("Завершити можна лише виріб у роботі");
         if(p.widthMm()==null || p.heightMm()==null || p.lines().isEmpty() || p.lines().stream().anyMatch(l->l.actual()==null))
             throw conflict("Збережіть обмір і фактичні витрати всіх позицій виробу");

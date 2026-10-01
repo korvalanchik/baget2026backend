@@ -106,6 +106,7 @@ public class ProductInvoiceProcessor {
   for(var selected:r.products()){
    var p=db.queryForMap("SELECT p.*,o.BranchNo AS branchNo FROM order_products p JOIN orders o ON o.OrderNo=p.order_no WHERE p.id=? FOR UPDATE",selected.productId());
    access.branch(user,((Number)p.get("branchNo")).longValue());
+   if("RESELLER".equals(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,p.get("order_no"))))throw conflict("Реселлерське замовлення потребує рахунку за ListPrice_1. Цей шлях рахунків ще не адаптовано");
    if(!Boolean.TRUE.equals(p.get("active")) && !(p.get("active") instanceof Number n && n.intValue()==1))throw conflict("Виріб уже неактивний");
    if(!Boolean.TRUE.equals(p.get("production_confirmed")) && !(p.get("production_confirmed") instanceof Number confirmed && confirmed.intValue()==1))throw conflict("Витрати виробу не підтверджено");
    if(p.get("active_rework_id")!=null || "WORKSHOP".equals(p.get("current_location")) || "WORKSHOP".equals(p.get("pending_location")))throw conflict("Виріб повертається до майстерні або перебуває на доопрацюванні");

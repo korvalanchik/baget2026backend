@@ -32,6 +32,17 @@ public class PartPriceResolver {
         @Override public Object getCredentials() { return ""; }
     }
 
+    public Authentication forTier(Authentication source,String tier) {
+        requireAuthenticated(source);
+        if(!Set.of("OWN","RESELLER").contains(tier))throw new IllegalArgumentException("Unknown branch price tier");
+        return new TierAuthentication(source,tier);
+    }
+    private static final class TierAuthentication extends org.springframework.security.authentication.AbstractAuthenticationToken {
+        private final Authentication source; private final String tier;
+        private TierAuthentication(Authentication source,String tier){super(source.getAuthorities());this.source=source;this.tier=tier;setAuthenticated(true);}
+        @Override public Object getPrincipal(){return source.getPrincipal();}
+        @Override public Object getCredentials(){return "";}
+    }
     public BigDecimal resolve(Parts part, Authentication auth) {
         requireAuthenticated(auth);
         // Only an internal typed context can skip pricing. A JWT authority with the same name cannot.
@@ -39,7 +50,9 @@ public class PartPriceResolver {
         Set<String> roles = auth.getAuthorities().stream()
                 .map(a -> a.getAuthority()).collect(Collectors.toSet());
         Double value;
-        if (roles.contains("ROLE_ADMIN")) {
+        if(auth instanceof TierAuthentication context) {
+            value="OWN".equals(context.tier)?part.getListPrice():part.getListPrice_3();
+        } else if (roles.contains("ROLE_ADMIN")) {
             value = part.getCost();
         } else if (roles.contains("ROLE_COUNTER")) {
             value = part.getListPrice_1();

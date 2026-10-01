@@ -23,6 +23,8 @@ import java.security.MessageDigest;
 @Service
 @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
 public class CalculatedOrderService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.baget.commercial.CommercialService commercial;
     private final JdbcTemplate db;
     private final EstimatePreviewService preview;
     private final InventoryReservations reservations;
@@ -62,7 +64,8 @@ public class CalculatedOrderService {
         if(count>50) throw bad("Кошторис може містити до 50 складових");
     }
     private record Priced(CalculatedOrderRequest.Product draft,EstimatePreviewResponse result) {}
-    private List<Priced> price(CalculatedOrderRequest r,Authentication auth) {
+    private List<Priced> price(CalculatedOrderRequest r,Authentication auth,String mode) {
+        auth=commercial.pricing(auth,mode);
         var list=new ArrayList<Priced>();
         for(var product:r.products()) {
             // Component IDs are assigned by the server within each physical product.
@@ -83,7 +86,8 @@ public class CalculatedOrderService {
             return read(((Number)previous.get(0).get("OrderNo")).longValue(),auth);
         }
         if(r.expectedRevision()!=0) throw bad("Нове замовлення повинно мати ревізію 0");
-        var priced=price(r,auth);
+        var settings=commercial.settings(r.branchName(),auth);
+        var priced=price(r,auth,settings.get("mode").toString());
         var ids=materialIds(priced);reservations.lockParts(ids);
         long orderNo=counter+1;
         db.update("UPDATE temp_order_counter SET last_temp_order_no=? WHERE id=1",orderNo);
@@ -92,6 +96,7 @@ public class CalculatedOrderService {
         var total=priced.stream().map(p->p.result().total()).reduce(BigDecimal.ZERO,BigDecimal::add);
         db.update("INSERT INTO orders(OrderNo,CustNo,BranchNo,EmpNo,SaleDate,ShipDate,ItemsTotal,AmountDueN,AmountPaid,Income,StatusOrder,Notice,PublicId,calculation_revision,calculation_request_key,calculation_request_hash) VALUES(?,?,?,?,CURRENT_TIMESTAMP,?,?,?,0,0,1,?,?,1,?,?)",
                 orderNo,customer,branch,user.getId(),date(r.dueDate()),total,total,r.notice(),UUID.randomUUID().toString(),r.requestKey(),hash);
+        db.update("UPDATE orders SET commerce_mode=?,commerce_partner_id=? WHERE OrderNo=?",settings.get("mode"),settings.get("partnerId"),orderNo);
         persist(orderNo,1,priced,auth.getName());
         for(long id:ids) reservations.refillPart(id,auth.getName());
         return read(orderNo,auth);
@@ -110,7 +115,8 @@ public class CalculatedOrderService {
         validate(r);var old=lock(orderNo,auth);editable(orderNo,old,r.expectedRevision());
         if(!old.branchName().equals(r.branchName()) || !Objects.equals(r.custNo(),old.custNo()))
             throw bad("Під час редагування конфігурації клієнт і філія залишаються незмінними");
-        var priced=price(r,auth);
+        var mode=db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,orderNo);
+        var priced=price(r,auth,mode);
         var ids=materialIds(priced);ids.addAll(reservations.orderParts(orderNo));reservations.lockParts(ids);
         reservations.release(orderNo,auth.getName());
         db.update("DELETE FROM items WHERE OrderNo=?",orderNo);
@@ -193,6 +199,7 @@ public class CalculatedOrderService {
                     if(!"WORK".equals(meta.get("part_kind"))) demand.merge(c.partNo(),c.totalConsumption(),BigDecimal::add);
                 }
             }
+            commercial.initialize(orderNo,productId,actor);
             demand.forEach((part,qty)->reservations.add(productId,part,qty,actor));
         }
     }

@@ -90,7 +90,7 @@ public class CustomerCreditService {
  private static PreviewException conflict(String message){return new PreviewException(HttpStatus.CONFLICT,"CREDIT_CONFLICT",message);}
  public Object receivables(Long branch,boolean overdue,int page,Authentication a) {
   var u=access.user(a);if(page<0 || page>100000)throw conflict("Некоректна сторінка");
-  var branches=new TreeSet<Long>();for (var allowedBranch : u.getAllowedBranches()) {branches.add(allowedBranch.getBranchNo());}
+  var branches=new TreeSet<Long>();for(var allowedBranch:u.getAllowedBranches())branches.add(allowedBranch.getBranchNo());
   if(access.admin(u))branches.addAll(db.queryForList("SELECT BranchNo FROM branches",Long.class));
   if(branch!=null){access.branch(u,branch);branches=new TreeSet<>(Set.of(branch));}
   var result=new ArrayList<Map<String,Object>>();

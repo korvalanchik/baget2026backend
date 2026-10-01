@@ -13,14 +13,18 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/calculations/estimate-preview")
 public class EstimatePreviewController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.baget.commercial.CommercialService commercial;
     private final EstimatePreviewService service;
     public EstimatePreviewController(EstimatePreviewService service) { this.service = service; }
 
     @PostMapping
     public EstimatePreviewResponse preview(@Valid @RequestBody EstimatePreviewRequest request,
-                                            Authentication auth) {
-        return service.preview(request, auth);
+                                            @RequestParam(required=false) String branch,@RequestParam(required=false) Long orderNo,Authentication auth) {
+        return service.preview(request, orderNo!=null?commercial.pricingOrder(orderNo,auth):branch==null?auth:commercial.pricingBranch(auth,branch));
     }
+
+    public EstimatePreviewResponse preview(EstimatePreviewRequest request,Authentication auth) {return service.preview(request,auth);}
 
     public record ApiError(String code, String message, String clientItemId, List<FieldError> errors) {}
 

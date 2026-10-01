@@ -43,6 +43,7 @@ public class ProductionService {
     private View locked(long id,long revision,Authentication auth) {
         if(db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,id).isEmpty()) throw conflict("Замовлення не знайдено");
         orders.read(id,auth);
+        if(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,id)!=null)throw conflict("Замовлення з контролем ціни ведеться через картки виробів майстерні");
         if(Boolean.TRUE.equals(db.queryForObject("SELECT workshop_mode FROM orders WHERE OrderNo=?",Boolean.class,id)))
             throw conflict("Замовлення ведеться по виробах. Скористайтеся карткою майстерні");
         var v=view(id,auth);
@@ -132,6 +133,7 @@ public class ProductionService {
     }
     /** Called by the existing invoice service in its transaction; client amounts are ignored. */
     public BigDecimal invoiceAmount(long id,Authentication auth) {
+        if("RESELLER".equals(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,id)))throw conflict("Для реселлерського замовлення потрібен окремий рахунок фірмі за ListPrice_1");
         db.queryForObject("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,id);
         boolean workshop=Boolean.TRUE.equals(db.queryForObject("SELECT workshop_mode FROM orders WHERE OrderNo=?",Boolean.class,id));
         if(workshop) {

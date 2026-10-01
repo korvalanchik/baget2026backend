@@ -55,6 +55,8 @@ public class InvoiceSettlementService {
 
         InvoiceOperationContext ctx = invoiceOperationContextService.resolveContext(request, user);
         customerPaymentAccess.invoice(customerPaymentAccess.user(authentication),ctx.invoice().getId());
+        if(db.queryForObject("SELECT COUNT(*) FROM branch_commercial_settings WHERE branch_no=? AND mode='RESELLER'",Long.class,ctx.branch().getBranchNo())>0)
+            throw new TransactionException("Кошти клієнтів філії реселлера не надходять у касу підприємства. Окремий довідковий журнал буде додано наступним етапом");
         validateAmounts(request);
         lockContext(ctx);
 
@@ -90,6 +92,8 @@ public class InvoiceSettlementService {
 
         InvoiceOperationContext ctx = invoiceOperationContextService.resolveContext(request, user);
         customerPaymentAccess.branch(customerPaymentAccess.user(authentication),request.branchNo());
+        if(db.queryForObject("SELECT COUNT(*) FROM branch_commercial_settings WHERE branch_no=? AND mode='RESELLER'",Long.class,ctx.branch().getBranchNo())>0)
+            throw new TransactionException("Кошти клієнтів філії реселлера не надходять у касу підприємства. Окремий довідковий журнал буде додано наступним етапом");
         validateAmounts(request);
         lockContext(ctx);
 
