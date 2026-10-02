@@ -72,9 +72,11 @@ public class ProcurementService {
         """;
     public List<Map<String,Object>> needs(String q,int page,boolean onlyNeeded,Authentication a) {
         access(a);
+        // Global StringTrimmerEditor(true) converts an empty search parameter to null.
+        String search=q==null?"":q.trim();
         // Filtering is in SQL before paging. Unknown stock needs a count, not an invented zero balance.
         String filter=onlyNeeded?" AND (p.OnHand IS NULL OR COALESCE(r.demand,0)>COALESCE(r.reserved,0) OR p.OnHand+COALESCE(i.incoming,0)-COALESCE(r.demand,0)<CASE WHEN (p.calculation_method='FRAME_PROFILE' OR (p.InQuality=2 AND p.ProfilWidth>0.0003)) AND COALESCE(fs.activeBranches,0)=0 THEN 0 ELSE COALESCE(s.minimum_qty,0) END)":"";
-        var rows=db.queryForList(NEEDS+" AND (LOCATE(?,p.Description)>0 OR LOCATE(?,CAST(p.PartNo AS CHAR))>0)"+filter+" ORDER BY p.PartNo LIMIT 100 OFFSET ?",q,q,Math.max(0,Math.min(page,100000))*100);
+        var rows=db.queryForList(NEEDS+" AND (LOCATE(?,p.Description)>0 OR LOCATE(?,CAST(p.PartNo AS CHAR))>0)"+filter+" ORDER BY p.PartNo LIMIT 100 OFFSET ?",search,search,Math.max(0,Math.min(page,100000))*100);
         rows.forEach(this::calculateNeed);return rows;
     }
     private void calculateNeed(Map<String,Object> row) {

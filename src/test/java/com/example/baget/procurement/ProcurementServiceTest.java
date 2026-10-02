@@ -40,6 +40,26 @@ class ProcurementServiceTest {
     Map<String,Object> part(String unit,String stock){var m=new HashMap<String,Object>();m.put("unit",unit);m.put("stock",stock==null?null:n(stock));return m;}
     ProcurementService.Receipt receipt(long revision,ProcurementService.ReceivedLine...lines){return new ProcurementService.Receipt(key,revision,"Н-1",LocalDate.of(2026,9,28),"",List.of(lines));}
     ProcurementService.ReceivedLine qty(long id,String amount){return new ProcurementService.ReceivedLine(id,n(amount));}
+    @Test void emptySearchConvertedToNullDoesNotHideNeeds() {
+        var row=new HashMap<String,Object>();
+        row.put("partNo",10L);row.put("onHand",n("2"));row.put("demand",n("5"));
+        row.put("reserved",n("2"));row.put("incoming",n("0"));
+        row.put("minimum",n("0"));row.put("target",n("0"));
+        row.put("frameProfile",1);row.put("activeBranches",0L);row.put("purchaseStatus","ALLOWED");
+        when(db.queryForList(contains("FROM parts p"),eq(""),eq(""),eq(0))).thenReturn(List.of(row));
+        var result=service.needs(null,0,true,auth);
+        assertEquals(1,result.size());
+        assertEquals(n("3"),result.get(0).get("shortage"));
+        assertEquals(n("3"),result.get(0).get("recommended"));
+        verify(db).queryForList(contains("FROM parts p"),eq(""),eq(""),eq(0));
+        verify(db,never()).update(anyString(),any(Object[].class));
+    }
+    @Test void blankSearchAndTrimmedArticleUseNonNullSqlParameters() {
+        service.needs("   ",0,true,auth);
+        verify(db).queryForList(contains("FROM parts p"),eq(""),eq(""),eq(0));
+        service.needs("  27540  ",0,false,auth);
+        verify(db).queryForList(contains("FROM parts p"),eq("27540"),eq("27540"),eq(0));
+    }
     @Test void rolesAreReadFromDatabase(){when(users.findByUsername("store")).thenReturn(Optional.empty());assertThrows(PreviewException.class,()->service.receive(9,receipt(3,qty(1,"3")),auth));verifyNoInteractions(db,reserves);}
     @Test void staleRevisionDoesNotPostStock(){assertThrows(PreviewException.class,()->service.receive(9,receipt(2,qty(1,"3")),auth));verifyNoInteractions(reserves);verify(db,never()).update(anyString(),any(Object[].class));}
     @Test void foreignAndDuplicateLinesRejected(){assertThrows(PreviewException.class,()->service.receive(9,receipt(3,qty(88,"1")),auth));assertThrows(PreviewException.class,()->service.receive(9,receipt(3,qty(1,"1"),qty(1,"1")),auth));verify(db,never()).update(anyString(),any(Object[].class));}
