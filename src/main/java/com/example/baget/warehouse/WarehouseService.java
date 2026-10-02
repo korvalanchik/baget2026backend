@@ -123,7 +123,9 @@ public class WarehouseService {
     }
     public List<Map<String,Object>> materials(String search,int page,boolean shortageOnly,Authentication a) {
         stockAccess(a);
-        return db.queryForList("SELECT p.PartNo AS partNo,p.Description AS description,p.unit_type AS unit,CAST(p.OnHand AS DECIMAL(24,6)) AS onHand,COALESCE(r.demand,0) AS demand,COALESCE(r.reserved,0) AS reserved,GREATEST(0,COALESCE(r.demand,0)-COALESCE(r.reserved,0)) AS shortage FROM parts p LEFT JOIN (SELECT part_no,SUM(demand) demand,SUM(reserved) reserved FROM material_reservations WHERE active=1 GROUP BY part_no) r ON r.part_no=p.PartNo WHERE (p.part_kind='MATERIAL' OR r.part_no IS NOT NULL) AND (LOCATE(?,p.Description)>0 OR LOCATE(?,CAST(p.PartNo AS CHAR))>0) AND (?=0 OR COALESCE(r.demand,0)>COALESCE(r.reserved,0)) ORDER BY p.PartNo LIMIT 100 OFFSET ?",search,search,shortageOnly?1:0,Math.max(0,Math.min(page,100000))*100);
+        // Global StringTrimmerEditor(true) converts an empty search parameter to null.
+        String query=search==null?"":search.trim();
+        return db.queryForList("SELECT p.PartNo AS partNo,p.Description AS description,p.unit_type AS unit,CAST(p.OnHand AS DECIMAL(24,6)) AS onHand,COALESCE(r.demand,0) AS demand,COALESCE(r.reserved,0) AS reserved,GREATEST(0,COALESCE(r.demand,0)-COALESCE(r.reserved,0)) AS shortage FROM parts p LEFT JOIN (SELECT part_no,SUM(demand) demand,SUM(reserved) reserved FROM material_reservations WHERE active=1 GROUP BY part_no) r ON r.part_no=p.PartNo WHERE (p.part_kind='MATERIAL' OR r.part_no IS NOT NULL) AND (LOCATE(?,p.Description)>0 OR LOCATE(?,CAST(p.PartNo AS CHAR))>0) AND (?=0 OR COALESCE(r.demand,0)>COALESCE(r.reserved,0)) ORDER BY p.PartNo LIMIT 100 OFFSET ?",query,query,shortageOnly?1:0,Math.max(0,Math.min(page,100000))*100);
     }
     public Map<String,Object> material(long id,Authentication a) {
         stockAccess(a);

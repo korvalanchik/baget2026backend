@@ -28,6 +28,28 @@ class WarehouseServiceTest {
         doReturn(Map.of()).when(service).material(1,auth);
     }
     WarehouseService.Stock request(String operation,String qty,String expected){return new WarehouseService.Stock("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",operation,n(qty),n(expected),"Документ 1");}
+    @Test void nullSearchReturnsMaterialsInsteadOfFilteringEverythingOut() {
+        Map<String,Object> row=Map.of("partNo",27540L,"onHand",n("5"));
+        when(db.queryForList(contains("FROM parts p"),eq(""),eq(""),eq(0),eq(0)))
+            .thenReturn(List.of(row));
+        assertEquals(List.of(row),service.materials(null,0,false,auth));
+        verify(db).queryForList(contains("FROM parts p"),eq(""),eq(""),eq(0),eq(0));
+        verify(db,never()).update(anyString(),any(Object[].class));
+        verifyNoInteractions(reservations);
+    }
+    @Test void blankSearchKeepsShortageFilterAndPagination() {
+        service.materials("   ",1,true,auth);
+        verify(db).queryForList(contains("FROM parts p"),eq(""),eq(""),eq(1),eq(100));
+    }
+    @Test void articleSearchIsTrimmed() {
+        service.materials("  27540  ",0,false,auth);
+        verify(db).queryForList(contains("FROM parts p"),eq("27540"),eq("27540"),eq(0),eq(0));
+    }
+    @Test void materialsListStillRequiresStockAccess() {
+        when(users.findByUsername("admin")).thenReturn(Optional.empty());
+        assertThrows(PreviewException.class,()->service.materials(null,0,false,auth));
+        verifyNoInteractions(db,reservations);
+    }
     @Test void countCannotDestroyReservations(){assertThrows(PreviewException.class,()->service.stock(1,request("COUNT","5","10"),auth));verifyNoInteractions(reservations);verify(db,never()).update(anyString(),any(Object[].class));}
     @Test void concurrentConsumptionMakesCountStale(){assertThrows(PreviewException.class,()->service.stock(1,request("COUNT","9","12"),auth));verifyNoInteractions(reservations);}
     @Test void receiptRefillsDemandAfterUpdatingPhysicalStock(){service.stock(1,request("RECEIPT","3","10"),auth);var order=inOrder(db,reservations);order.verify(db).update("UPDATE parts SET OnHand=?,Version=COALESCE(Version,0)+1 WHERE PartNo=?",n("13"),1L);order.verify(reservations).refillPart(1,"admin");}
