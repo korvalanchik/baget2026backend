@@ -38,6 +38,27 @@ class ProductInvoiceProcessorTest {
   product.put("production_confirmed",true);
   when(db.queryForMap(startsWith("SELECT p.*,o.BranchNo"),eq(10L))).thenReturn(product);
  }
+ @Test void initialOptionsWithoutSearchReturnsBranchesAndNoPayers() {
+  when(access.admin(user)).thenReturn(true);
+  Map<String,Object> branch=Map.of("id",1L,"name","Філія");
+  when(db.queryForList(startsWith("SELECT BranchNo AS id"),any(Object[].class))).thenReturn(List.of(branch));
+  var result=service.options(null,auth);
+  assertEquals(List.of(branch),result.get("branches"));
+  assertEquals(List.of(),result.get("payers"));
+  verify(db,never()).queryForList(startsWith("SELECT CustNo AS id"),any(Object[].class));
+  verify(db,never()).update(anyString(),any(Object[].class));
+  verifyNoInteractions(orchestrator);
+ }
+ @Test void blankOrShortPayerSearchDoesNotQueryCustomers() {
+  when(access.admin(user)).thenReturn(true);
+  for(String query:List.of("", "   ", " а ")) assertEquals(List.of(),service.options(query,auth).get("payers"));
+  verify(db,never()).queryForList(startsWith("SELECT CustNo AS id"),any(Object[].class));
+ }
+ @Test void payerSearchTrimsInput() {
+  when(access.admin(user)).thenReturn(true);
+  service.options("  Фірма  ",auth);
+  verify(db).queryForList(startsWith("SELECT CustNo AS id"),eq("Фірма"),eq("Фірма"));
+ }
  @Test void pendingReturnAndOpenReworkCannotBeBilled() {
   product.put("pending_location","WORKSHOP");
   assertThrows(PreviewException.class,()->service.issue(request(),auth));

@@ -68,9 +68,10 @@ public class ProductInvoiceProcessor {
   args.addAll(ids);return " AND "+column+" IN ("+String.join(",",Collections.nCopies(ids.size(),"?"))+")";
  }
  public Map<String,Object> options(String q,Authentication a){
+  String query=q==null?"":q.trim();
   var u=access.user(a);var args=new ArrayList<Object>();String filter=scope(u,args,"BranchNo");
-  return Map.of("branches",db.queryForList("SELECT BranchNo AS id,BranchName AS name FROM branches WHERE 1=1"+filter+" ORDER BY BranchName",args.toArray()),
-    "payers",q.trim().length()<2?List.of():db.queryForList("SELECT CustNo AS id,Company AS name,Mobile AS phone FROM customer WHERE LOCATE(?,Company)>0 OR LOCATE(?,Mobile)>0 ORDER BY Company LIMIT 30",q.trim(),q.trim()));
+  return Map.of("branches",db.queryForList("SELECT BranchNo AS id,BranchName AS name FROM branches WHERE 1=1 "+filter+" ORDER BY BranchName",args.toArray()),
+    "payers",query.length()<2?List.of():db.queryForList("SELECT CustNo AS id,Company AS name,Mobile AS phone FROM customer WHERE LOCATE(?,Company)>0 OR LOCATE(?,Mobile)>0 ORDER BY Company LIMIT 30",query,query));
  }
  public List<Map<String,Object>> list(int page,Authentication a){
   var u=access.user(a);var args=new ArrayList<Object>();String filter="";
