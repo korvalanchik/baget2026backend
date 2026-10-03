@@ -20,6 +20,9 @@ public class ProductPaymentCheck {
     public ProductPaymentCheck(JdbcTemplate db,InvoiceRepository invoices,InvoiceFinanceService finance,EntityManager em) {
         this.db=db;this.invoices=invoices;this.finance=finance;this.em=em;
     }
+    private boolean resellerProduct(long product) {
+        return "RESELLER".equals(db.queryForObject("SELECT o.commerce_mode FROM order_products p JOIN orders o ON o.OrderNo=p.order_no WHERE p.id=?",String.class,product));
+    }
     private Long invoiceId(long product) {
         var ids=db.queryForList("SELECT invoice_id FROM product_invoice_claims WHERE product_id=?",Long.class,product);
         if(!ids.isEmpty()) return ids.get(0);
@@ -29,6 +32,11 @@ public class ProductPaymentCheck {
     }
     public Map<String,Object> read(long product) {
         var context=db.queryForMap("SELECT o.CustNo AS customerId,o.BranchNo AS branchNo FROM order_products p JOIN orders o ON o.OrderNo=p.order_no WHERE p.id=?",product);
+        if(resellerProduct(product)) {
+            context.put("canIssue",true);context.put("externalSettlement",true);
+            context.put("message","Розрахунки з клієнтом веде фірма-посередник. Її борг підприємству не блокує видачу; перевірте розрахунок із клієнтом у посередника.");
+            return context;
+        }
         Long id=invoiceId(product);
         context.put("canIssue",false);
         if(id==null){context.put("message","Спочатку бухгалтер має оформити остаточний рахунок за виріб");return context;}
@@ -48,6 +56,7 @@ public class ProductPaymentCheck {
     }
     // Match settlement/merge lock order: customer, invoice, then order/product in WarehouseService.
     public Long lock(long product) {
+        if(resellerProduct(product))return null;
         Long id=invoiceId(product);
         if(id==null)throw conflict("Спочатку оформіть остаточний рахунок за виріб");
         var customer=db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,id);
@@ -57,6 +66,7 @@ public class ProductPaymentCheck {
     }
     public void requirePaid(long product,Long lockedInvoice) { checkIssue(product,lockedInvoice); }
     public Map<String,Object> checkIssue(long product,Long lockedInvoice) {
+        if(resellerProduct(product))return Map.of();
         if(!Objects.equals(lockedInvoice,invoiceId(product)))throw conflict("Рахунок змінився. Оновіть картку виробу");
         var invoice=invoices.findById(lockedInvoice).orElseThrow();em.refresh(invoice);
         if(invoice.getLifecycle()!=InvoiceEnums.InvoiceLifecycle.ACTIVE || invoice.getStatus()==InvoiceEnums.InvoiceStatus.CANCELLED || invoice.getStatus()==InvoiceEnums.InvoiceStatus.DRAFT)

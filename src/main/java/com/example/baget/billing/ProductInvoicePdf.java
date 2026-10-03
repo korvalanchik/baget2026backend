@@ -24,6 +24,7 @@ public class ProductInvoicePdf {
   doc.add(new Paragraph("Рахунок № "+invoice.get("invoiceNo"),bold));
   doc.add(new Paragraph("Дата: "+invoice.get("createdAt"),font));
   doc.add(new Paragraph("Платник: "+invoice.get("payerName"),font));
+  if(invoice.get("partnerId")!=null)doc.add(new Paragraph("Рахунок фірмі-посереднику за реселлерськими цінами",bold));
   if("MERGED".equals(invoice.get("lifecycle")))doc.add(new Paragraph("Архівний рахунок: залишок перенесено до іншого рахунку",bold));
   var table=new PdfPTable(new float[]{2,4,2,2});table.setWidthPercentage(100);table.setSpacingBefore(15);table.setHeaderRows(1);
   for(String h:new String[]{"Замовлення","Виріб / підстава","Вартість виробу","До цього рахунку"})table.addCell(new Phrase(h,bold));

@@ -12,7 +12,7 @@ public class ProductInvoiceController {
  private final ProductInvoiceProcessor service;
  private final ProductInvoicePdf pdf;
  @GetMapping("/options") public Object options(@RequestParam(name="q",defaultValue="") String q,Authentication a){return service.options(q,a);}
- @GetMapping("/ready") public Object ready(@RequestParam(name="page",defaultValue="0") int page,Authentication a){return service.ready(page,a);}
+ @GetMapping("/ready") public Object ready(@RequestParam(name="page",defaultValue="0") int page,@RequestParam(name="partnerId",required=false) Long partnerId,Authentication a){return service.ready(page,partnerId,a);}
  @GetMapping public Object list(@RequestParam(name="page",defaultValue="0") int page,Authentication a){return service.list(page,a);}
  @GetMapping("/{id}") public Object read(@PathVariable("id") long id,Authentication a){return service.read(id,a);}
  @PostMapping public Object issue(@Valid @RequestBody ProductInvoiceProcessor.Issue r,Authentication a){return service.issue(r,a);}

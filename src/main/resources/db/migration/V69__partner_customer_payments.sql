@@ -1,0 +1,26 @@
+-- Reference money owned by reseller companies. No business ledger / CT entries.
+CREATE TABLE partner_customer_payments (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ request_key CHAR(36) NOT NULL UNIQUE,
+ partner_id BIGINT NOT NULL,
+ customer_id BIGINT NOT NULL,
+ branch_no BIGINT NOT NULL,
+ order_no BIGINT NULL,
+ operation VARCHAR(16) NOT NULL,
+ amount DECIMAL(18,2) NOT NULL,
+ allocation_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+ actor VARCHAR(255) NOT NULL,
+ note VARCHAR(2000) NULL,
+ payload JSON NOT NULL,
+ result JSON NOT NULL,
+ created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ FOREIGN KEY(partner_id) REFERENCES customer(CustNo),
+ FOREIGN KEY(customer_id) REFERENCES customer(CustNo),
+ FOREIGN KEY(branch_no) REFERENCES branches(BranchNo),
+ FOREIGN KEY(order_no) REFERENCES orders(OrderNo),
+ INDEX partner_customer_history(partner_id,customer_id,id),
+ INDEX partner_order_paid(partner_id,customer_id,order_no),
+ CHECK(operation IN ('ADVANCE','PAYMENT')),
+ CHECK(amount>=0 AND allocation_amount>=0 AND amount+allocation_amount>0),
+ CHECK((operation='ADVANCE' AND order_no IS NULL AND allocation_amount=0) OR (operation='PAYMENT' AND order_no IS NOT NULL))
+);

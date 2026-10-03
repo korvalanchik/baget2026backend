@@ -25,6 +25,11 @@ class ProductPaymentCheckTest {
   when(db.queryForList("SELECT invoice_id FROM product_invoice_claims WHERE product_id=?",Long.class,14L)).thenReturn(List.of(5L));
   when(invoices.findById(5L)).thenReturn(Optional.of(invoice));when(finance.calculateInvoiceDebt(invoice)).thenReturn(BigDecimal.ZERO);
  }
+ @Test void resellerDeliveryDoesNotDependOnCompanyInvoicePayment() {
+  when(db.queryForObject(startsWith("SELECT o.commerce_mode"),eq(String.class),eq(14L))).thenReturn("RESELLER");
+  assertNull(service.lock(14));assertEquals(Map.of(),service.checkIssue(14,null));
+  verifyNoInteractions(finance,credit,invoices,em);
+ }
  @Test void unpaidCannotBeIssued(){when(finance.calculateInvoiceDebt(invoice)).thenReturn(BigDecimal.ONE);assertThrows(PreviewException.class,()->service.requirePaid(14,5L));}
  @Test void paidInvoiceCanBeIssued(){assertDoesNotThrow(()->service.requirePaid(14,5L));verify(em).refresh(invoice);}
  @Test void statusAloneDoesNotProvePayment(){invoice.setStatus(InvoiceEnums.InvoiceStatus.PAID);when(finance.calculateInvoiceDebt(invoice)).thenReturn(BigDecimal.ONE);assertThrows(PreviewException.class,()->service.requirePaid(14,5L));}

@@ -32,6 +32,7 @@ public class FrameAssortmentService {
     }
     public static final String FRAME="(p.calculation_method='FRAME_PROFILE' OR (p.InQuality=2 AND p.ProfilWidth>0.0003))";
     public Map<String,Object> matrix(String query,int page,boolean activeOnly,Authentication a){
+        query=query==null?"":query.trim();
         var branches=branches(a);
         var rows=db.queryForList("SELECT p.PartNo AS partNo,p.Description AS description,p.calculation_method AS method,p.unit_type AS unit,CAST(p.OnHand AS DECIMAL(24,6)) AS stock,COALESCE(s.activeCount,0) AS activeCount,COALESCE(f.status,'ALLOWED') AS purchaseStatus,COALESCE(f.revision,0) AS purchaseRevision FROM parts p LEFT JOIN (SELECT part_no,COUNT(*) AS activeCount FROM branch_frame_samples WHERE status='ACTIVE' GROUP BY part_no) s ON s.part_no=p.PartNo LEFT JOIN frame_purchase_policy f ON f.part_no=p.PartNo WHERE "+FRAME+" AND (LOCATE(?,p.Description)>0 OR LOCATE(?,CAST(p.PartNo AS CHAR))>0) AND (?=0 OR COALESCE(s.activeCount,0)>0) ORDER BY p.PartNo LIMIT 50 OFFSET ?",query,query,activeOnly?1:0,Math.max(0,Math.min(page,100000))*50);
         var allowed=new HashSet<Long>();for(var b:branches)allowed.add(((Number)b.get("id")).longValue());

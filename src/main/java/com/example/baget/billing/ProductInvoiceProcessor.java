@@ -56,9 +56,18 @@ public class ProductInvoiceProcessor {
   db.update("INSERT INTO billing_requests(request_key,actor,payload) VALUES(?,?,?)",key,user.getUsername(),payload);return null;
  }
  private void finish(String key,long id){db.update("UPDATE billing_requests SET invoice_id=? WHERE request_key=?",id,key);}
- public List<Map<String,Object>> ready(int page,Authentication a){
-  var u=access.user(a);var args=new ArrayList<Object>();String scope=scope(u,args,"o.BranchNo");args.add(offset(page));
-  return db.queryForList("SELECT p.id AS productId,p.order_no AS orderNo,p.client_product_id AS productName,p.actual_total AS amount,p.confirmed_revision AS confirmedRevision,c.Company AS customerName,c.CustNo AS customerId,b.BranchName AS branchName,b.BranchNo AS branchNo FROM order_products p JOIN orders o ON o.OrderNo=p.order_no JOIN customer c ON c.CustNo=o.CustNo JOIN branches b ON b.BranchNo=o.BranchNo WHERE p.active=1 AND p.production_state='COMPLETED' AND p.production_confirmed=1 AND p.warehouse_received_at IS NOT NULL AND p.current_location<>'WORKSHOP' AND (p.pending_location IS NULL OR p.pending_location<>'WORKSHOP') AND p.active_rework_id IS NULL AND p.confirmed_calculation IS NOT NULL AND p.actual_total>0 AND NOT EXISTS(SELECT 1 FROM product_invoice_claims x WHERE x.product_id=p.id) AND NOT EXISTS(SELECT 1 FROM invoice_orders io WHERE io.order_no=p.order_no AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id))"+scope+" ORDER BY p.id LIMIT 100 OFFSET ?",args.toArray());
+ public List<Map<String,Object>> ready(int page,Authentication a){return ready(page,null,a);}
+ public List<Map<String,Object>> ready(int page,Long partner,Authentication a){
+  var u=access.user(a);var args=new ArrayList<Object>();String scope=scope(u,args,"o.BranchNo");if(partner!=null){scope+=" AND o.commerce_mode='RESELLER' AND o.commerce_partner_id=?";args.add(partner);}args.add(offset(page));
+  var rows=db.queryForList("SELECT p.id AS productId,p.order_no AS orderNo,p.client_product_id AS productName,p.actual_total AS amount,p.actual_total AS retailAmount,o.commerce_mode AS commerceMode,o.commerce_partner_id AS partnerId,p.confirmed_calculation AS confirmation,p.confirmed_revision AS confirmedRevision,c.Company AS customerName,c.CustNo AS customerId,b.BranchName AS branchName,b.BranchNo AS branchNo FROM order_products p JOIN orders o ON o.OrderNo=p.order_no JOIN customer c ON c.CustNo=o.CustNo JOIN branches b ON b.BranchNo=o.BranchNo WHERE p.active=1 AND o.StatusOrder NOT IN (5,10) AND p.production_state='COMPLETED' AND p.production_confirmed=1 AND p.warehouse_received_at IS NOT NULL AND p.current_location<>'WORKSHOP' AND (p.pending_location IS NULL OR p.pending_location<>'WORKSHOP') AND p.active_rework_id IS NULL AND p.confirmed_calculation IS NOT NULL AND p.actual_total>0 AND NOT EXISTS(SELECT 1 FROM product_invoice_claims x WHERE x.product_id=p.id) AND NOT EXISTS(SELECT 1 FROM invoice_orders io WHERE io.order_no=p.order_no AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id))"+scope+" ORDER BY p.id LIMIT 100 OFFSET ?",args.toArray());
+  for(var row:rows){
+   Object raw=row.remove("confirmation");
+   if("RESELLER".equals(row.get("commerceMode"))){
+    try {var priced=resellerSnapshot(((Number)row.get("productId")).longValue(),decode(raw.toString()));row.put("amount",priced.path("resellerTotal").decimalValue());}
+    catch(com.example.baget.calculation.preview.PreviewException ex){row.put("amount",null);row.put("billingError",ex.getMessage());}
+   }
+  }
+  return rows;
  }
  private int offset(int page){return Math.max(0,Math.min(page,100000))*100;}
  private String scope(User u,List<Object> args,String column){
@@ -70,8 +79,23 @@ public class ProductInvoiceProcessor {
  public Map<String,Object> options(String q,Authentication a){
   String query=q==null?"":q.trim();
   var u=access.user(a);var args=new ArrayList<Object>();String filter=scope(u,args,"BranchNo");
-  return Map.of("branches",db.queryForList("SELECT BranchNo AS id,BranchName AS name FROM branches WHERE 1=1 "+filter+" ORDER BY BranchName",args.toArray()),
-    "payers",query.length()<2?List.of():db.queryForList("SELECT CustNo AS id,Company AS name,Mobile AS phone FROM customer WHERE LOCATE(?,Company)>0 OR LOCATE(?,Mobile)>0 ORDER BY Company LIMIT 30",query,query));
+  return Map.of("branches",db.queryForList("SELECT BranchNo AS id,BranchName AS name,(SELECT mode FROM branch_commercial_settings s WHERE s.branch_no=branches.BranchNo) AS mode FROM branches WHERE 1=1 "+filter+" ORDER BY BranchName",args.toArray()),
+    "payers",query.length()<2?List.of():db.queryForList("SELECT CustNo AS id,Company AS name,Mobile AS phone FROM customer WHERE LOCATE(?,Company)>0 OR LOCATE(?,Mobile)>0 ORDER BY Company LIMIT 30",query,query),
+    "partners",partners(u));
+ }
+ private List<Map<String,Object>> partners(User u){
+  var args=new ArrayList<Object>();String filter=scope(u,args,"o.BranchNo");
+  return db.queryForList("SELECT DISTINCT c.CustNo AS id,c.Company AS name FROM orders o JOIN customer c ON c.CustNo=o.commerce_partner_id WHERE o.commerce_mode='RESELLER'"+filter+" ORDER BY c.Company",args.toArray());
+ }
+ private void ownAccountingBranch(long branch){
+  if(!"OWN".equals(db.queryForObject("SELECT mode FROM branch_commercial_settings WHERE branch_no=?",String.class,branch)))throw conflict("Для рахунку посереднику оберіть власну філію обліку підприємства");
+ }
+ private Long invoicePartner(long invoice){
+  var owners=db.queryForList("SELECT partner_id FROM invoice_commercial_owner WHERE invoice_id=?",Long.class,invoice);
+  return owners.isEmpty()?null:owners.get(0);
+ }
+ private com.fasterxml.jackson.databind.node.ObjectNode resellerSnapshot(long pid,JsonNode confirmed){
+  return ResellerInvoiceSnapshot.build(confirmed,db.queryForList("SELECT ItemNo AS itemNo,PartNo AS partNo,reseller_unit_price AS price FROM items WHERE order_product_id=? ORDER BY ItemNo",pid));
  }
  public List<Map<String,Object>> list(int page,Authentication a){
   var u=access.user(a);var args=new ArrayList<Object>();String filter="";
@@ -81,7 +105,7 @@ public class ProductInvoiceProcessor {
    filter=" AND NOT EXISTS(SELECT 1 FROM invoice_orders io JOIN orders o ON o.OrderNo=io.order_no WHERE io.invoice_id=i.id AND o.BranchNo NOT IN ("+marks+")) AND NOT EXISTS(SELECT 1 FROM customer_transactions t WHERE t.invoice_id=i.id AND t.type IN ('INVOICE','INVOICE_MERGE_OUT') AND t.branch_id NOT IN ("+marks+"))";
   }
   args.add(offset(page));
-  var rows=db.queryForList("SELECT DISTINCT i.id,i.invoice_no AS invoiceNo,c.Company AS payerName,i.total_amount AS amount,i.status,i.lifecycle FROM invoices i JOIN customer c ON c.CustNo=i.customer_id WHERE EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=i.id)"+filter+" ORDER BY i.id DESC LIMIT 100 OFFSET ?",args.toArray());
+  var rows=db.queryForList("SELECT DISTINCT i.id,i.invoice_no AS invoiceNo,c.Company AS payerName,i.total_amount AS amount,i.status,i.lifecycle,(SELECT partner_id FROM invoice_commercial_owner co WHERE co.invoice_id=i.id) AS partnerId FROM invoices i JOIN customer c ON c.CustNo=i.customer_id WHERE EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=i.id)"+filter+" ORDER BY i.id DESC LIMIT 100 OFFSET ?",args.toArray());
   for(var row:rows)row.put("debt",ledger.calculateInvoiceDebt(((Number)row.get("id")).longValue()));return rows;
  }
  public Map<String,Object> read(long id,Authentication a){
@@ -92,6 +116,7 @@ public class ProductInvoiceProcessor {
   for(var l:lines)l.put("snapshot",decode(l.get("snapshot").toString()));
   header.put("history",db.queryForList("SELECT type,amount,note,created_at AS createdAt FROM customer_transactions WHERE invoice_id=? AND active=1 ORDER BY id",id));
   header.put("mergedInto",db.queryForList("SELECT DISTINCT i.id,i.invoice_no AS invoiceNo FROM invoice_products ip JOIN invoices i ON i.id=ip.invoice_id WHERE ip.source_invoice_id=?",id));
+  header.put("partnerId",invoicePartner(id));
   header.put("products",lines);header.put("debt",ledger.calculateInvoiceDebt(id));header.put("availableAdvance",transactions.calculateAvailableAdvance(((Number)header.get("payerId")).longValue()));return header;
  }
  public Map<String,Object> issue(Issue r,Authentication a){
@@ -103,11 +128,19 @@ public class ProductInvoiceProcessor {
   for(long id:ids){var rows=db.queryForList("SELECT order_no FROM order_products WHERE id=? AND active=1",Long.class,id);if(rows.isEmpty())throw conflict("Виріб не знайдено");orderIds.add(rows.get(0));}
   for(long id:orderIds)db.queryForObject("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,id);
   var entries=new ArrayList<Map<String,Object>>();
-  BigDecimal total=BigDecimal.ZERO;
+  BigDecimal total=BigDecimal.ZERO;Boolean resellerBatch=null;Long partnerId=null;
   for(var selected:r.products()){
    var p=db.queryForMap("SELECT p.*,o.BranchNo AS branchNo FROM order_products p JOIN orders o ON o.OrderNo=p.order_no WHERE p.id=? FOR UPDATE",selected.productId());
    access.branch(user,((Number)p.get("branchNo")).longValue());
-   if("RESELLER".equals(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,p.get("order_no"))))throw conflict("Реселлерське замовлення потребує рахунку за ListPrice_1. Цей шлях рахунків ще не адаптовано");
+   boolean reseller="RESELLER".equals(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,p.get("order_no")));
+   if(resellerBatch!=null && resellerBatch!=reseller)throw conflict("Власні та реселлерські вироби оформлюються окремими рахунками");
+   resellerBatch=reseller;
+   if(reseller){
+    Long owner=db.queryForObject("SELECT commerce_partner_id FROM orders WHERE OrderNo=?",Long.class,p.get("order_no"));
+    if(owner==null || owner.longValue()!=r.payerId() || (partnerId!=null && !partnerId.equals(owner)))throw conflict("Усі вироби мають належати обраній фірмі-посереднику");
+    partnerId=owner;
+   }
+   if(db.queryForObject("SELECT COUNT(*) FROM orders WHERE OrderNo=? AND StatusOrder IN (5,10)",Long.class,p.get("order_no"))>0)throw conflict("Замовлення скасоване");
    if(!Boolean.TRUE.equals(p.get("active")) && !(p.get("active") instanceof Number n && n.intValue()==1))throw conflict("Виріб уже неактивний");
    if(!Boolean.TRUE.equals(p.get("production_confirmed")) && !(p.get("production_confirmed") instanceof Number confirmed && confirmed.intValue()==1))throw conflict("Витрати виробу не підтверджено");
    if(p.get("active_rework_id")!=null || "WORKSHOP".equals(p.get("current_location")) || "WORKSHOP".equals(p.get("pending_location")))throw conflict("Виріб повертається до майстерні або перебуває на доопрацюванні");
@@ -117,11 +150,19 @@ public class ProductInvoiceProcessor {
    var amount=(BigDecimal)p.get("actual_total");if(amount==null||amount.signum()<=0)throw conflict("Некоректна підтверджена сума");
    var snapshot=decode(p.get("confirmed_calculation").toString());
    if(snapshot.path("total").decimalValue().compareTo(amount)!=0 || snapshot.path("productId").asLong()!=selected.productId() || snapshot.path("revision").asLong()!=selected.confirmedRevision())throw conflict("Підтверджений знімок не відповідає виробу");
-   total=total.add(amount);entries.add(p);
+   if(reseller){
+    var priced=resellerSnapshot(selected.productId(),snapshot);priced.put("partnerId",partnerId);
+    amount=priced.path("resellerTotal").decimalValue();
+    if(amount.signum()<=0)throw conflict("Реселлерська сума має бути додатною");
+    p.put("confirmed_calculation",encode(priced));
+   }
+   p.put("invoiceAmount",amount);total=total.add(amount);entries.add(p);
   }
+  if(partnerId!=null)ownAccountingBranch(r.branchNo());
   Invoice invoice=create(r.payerId(),total,r.note());
+  if(partnerId!=null)db.update("INSERT INTO invoice_commercial_owner(invoice_id,partner_id) VALUES(?,?)",invoice.getId(),partnerId);
   for(var p:entries){
-   db.update("INSERT INTO invoice_products(invoice_id,product_id,order_no,confirmed_revision,snapshot,original_amount,billed_amount) VALUES(?,?,?,?,?,?,?)",invoice.getId(),p.get("id"),p.get("order_no"),p.get("confirmed_revision"),p.get("confirmed_calculation"),p.get("actual_total"),p.get("actual_total"));
+   db.update("INSERT INTO invoice_products(invoice_id,product_id,order_no,confirmed_revision,snapshot,original_amount,billed_amount) VALUES(?,?,?,?,?,?,?)",invoice.getId(),p.get("id"),p.get("order_no"),p.get("confirmed_revision"),p.get("confirmed_calculation"),p.get("invoiceAmount"),p.get("invoiceAmount"));
    db.update("INSERT INTO product_invoice_claims(product_id,invoice_id) VALUES(?,?)",p.get("id"),invoice.getId());
   }
   linkOrders(invoice.getId());
@@ -168,16 +209,25 @@ public class ProductInvoiceProcessor {
   for(long id:ids)db.queryForObject("SELECT id FROM invoices WHERE id=? FOR UPDATE",Long.class,id);
   var orders=new TreeSet<Long>();for(long id:ids)orders.addAll(db.queryForList("SELECT order_no FROM invoice_orders WHERE invoice_id=?",Long.class,id));
   for(long id:orders)db.queryForObject("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,id);
+  Boolean resellerMerge=null;Long mergePartner=null;
   var sources=new ArrayList<Invoice>();var debts=new HashMap<Long,BigDecimal>();BigDecimal total=BigDecimal.ZERO;
   for(long id:ids){
+   Long owner=invoicePartner(id);boolean reseller=owner!=null;
+   if(resellerMerge!=null && resellerMerge!=reseller)throw conflict("Не можна змішувати власні й реселлерські рахунки");
+   resellerMerge=reseller;
+   if(owner!=null){if(owner.longValue()!=r.payerId())throw conflict("Не можна переносити борг посередника іншому платнику");mergePartner=owner;}
    var inv=invoices.findById(id).orElseThrow();em.refresh(inv);
+   if(owner!=null && !owner.equals(inv.getCustomer().getCustNo()))throw conflict("Платник рахунку не відповідає фірмі");
    if(inv.getLifecycle()!=InvoiceEnums.InvoiceLifecycle.ACTIVE || inv.getStatus()==InvoiceEnums.InvoiceStatus.CANCELLED)throw conflict("Рахунок уже об'єднаний або скасований");
    if(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,id)==0)throw conflict("Старі рахунки об'єднуються через попередній інтерфейс; змішування форматів заборонене");
    BigDecimal debt=ledger.calculateInvoiceDebt(id);
    if(debt.stripTrailingZeros().scale()>2 || debt.signum()<=0||debt.compareTo(inv.getTotalAmount())>0)throw conflict("Рахунок не має додатного узгодженого боргу");
    sources.add(inv);debts.put(id,debt);total=total.add(debt);
   }
-  var target=create(r.payerId(),total,r.note());var postings=new ArrayList<CustomerTransaction>();
+  if(mergePartner!=null)ownAccountingBranch(r.branchNo());
+  var target=create(r.payerId(),total,r.note());
+  if(mergePartner!=null)db.update("INSERT INTO invoice_commercial_owner(invoice_id,partner_id) VALUES(?,?)",target.getId(),mergePartner);
+  var postings=new ArrayList<CustomerTransaction>();
   for(var source:sources){
    var rows=db.queryForList("SELECT * FROM invoice_products WHERE invoice_id=? ORDER BY product_id",source.getId());
    var amounts=rows.stream().map(row->(BigDecimal)row.get("billed_amount")).toList();

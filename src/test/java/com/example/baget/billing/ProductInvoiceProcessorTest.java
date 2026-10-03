@@ -32,6 +32,7 @@ class ProductInvoiceProcessorTest {
   service=spy(new ProductInvoiceProcessor(db,access,invoices,customers,branches,transactions,ledger,orchestrator,numbering,mock(EntityManager.class),new ObjectMapper(),settlement));
   doReturn(Map.of("id",42L)).when(service).read(42,auth);
   when(db.queryForList("SELECT order_no FROM order_products WHERE id=? AND active=1",Long.class,10L)).thenReturn(List.of(1L));
+  when(db.queryForObject(eq("SELECT COUNT(*) FROM orders WHERE OrderNo=? AND StatusOrder IN (5,10)"),eq(Long.class),anyLong())).thenReturn(0L);
   when(db.queryForObject("SELECT COUNT(*) FROM product_invoice_claims WHERE product_id=?",Long.class,10L)).thenReturn(0L);
   when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,1L)).thenReturn(0L);
   product=new HashMap<>(Map.of("id",10L,"order_no",1L,"branchNo",1L,"active",true,"production_state","COMPLETED","warehouse_received_at","2026-09-26","confirmed_revision",4L,"actual_total",new BigDecimal("100.00"),"confirmed_calculation","{\"productId\":10,\"revision\":4,\"total\":100.00}"));
@@ -58,6 +59,63 @@ class ProductInvoiceProcessorTest {
   when(access.admin(user)).thenReturn(true);
   service.options("  Фірма  ",auth);
   verify(db).queryForList(startsWith("SELECT CustNo AS id"),eq("Фірма"),eq("Фірма"));
+ }
+ void resellerFixture(long owner,String accountingMode) {
+  when(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,1L)).thenReturn("RESELLER");
+  when(db.queryForObject("SELECT commerce_partner_id FROM orders WHERE OrderNo=?",Long.class,1L)).thenReturn(owner);
+  when(db.queryForObject("SELECT mode FROM branch_commercial_settings WHERE branch_no=?",String.class,1L)).thenReturn(accountingMode);
+  product.put("confirmed_calculation","{\"productId\":10,\"revision\":4,\"total\":100.00,\"lines\":[{\"itemNo\":1,\"partNo\":20,\"actual\":2,\"role\":\"FRAME\"}]}");
+  when(db.queryForList(startsWith("SELECT ItemNo AS itemNo,PartNo AS partNo,reseller_unit_price"),eq(10L))).thenReturn(List.of(Map.of("itemNo",1L,"partNo",20L,"price",new BigDecimal("30"))));
+ }
+ @Test void resellerInvoicePostsWholesaleToCompany() {
+  resellerFixture(7,"OWN");service.issue(request(),auth);
+  var captor=org.mockito.ArgumentCaptor.forClass(CustomerTransaction.class);verify(transactions).saveAndFlush(captor.capture());
+  assertEquals(new BigDecimal("-60.00"),captor.getValue().getAmount());
+  assertEquals(7L,captor.getValue().getCustomer().getCustNo());
+  verify(db).update("INSERT INTO invoice_commercial_owner(invoice_id,partner_id) VALUES(?,?)",42L,7L);
+  verify(db).update("INSERT INTO product_invoice_claims(product_id,invoice_id) VALUES(?,?)",10L,42L);
+ }
+ @Test void twoBranchesOfOneCompanyShareWholesaleInvoice() {
+  resellerFixture(7,"OWN");
+  var second=new HashMap<>(product);second.put("id",11L);second.put("order_no",2L);second.put("branchNo",2L);
+  second.put("confirmed_calculation",product.get("confirmed_calculation").toString().replace("\"productId\":10","\"productId\":11"));
+  when(db.queryForMap(startsWith("SELECT p.*,o.BranchNo"),eq(11L))).thenReturn(second);
+  when(db.queryForList("SELECT order_no FROM order_products WHERE id=? AND active=1",Long.class,11L)).thenReturn(List.of(2L));
+  when(db.queryForObject("SELECT COUNT(*) FROM product_invoice_claims WHERE product_id=?",Long.class,11L)).thenReturn(0L);
+  when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,2L)).thenReturn(0L);
+  when(db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,2L)).thenReturn("RESELLER");
+  when(db.queryForObject("SELECT commerce_partner_id FROM orders WHERE OrderNo=?",Long.class,2L)).thenReturn(7L);
+  when(db.queryForList(startsWith("SELECT ItemNo AS itemNo,PartNo AS partNo,reseller_unit_price"),eq(11L))).thenReturn(List.of(Map.of("itemNo",1L,"partNo",20L,"price",new BigDecimal("20"))));
+  service.issue(new ProductInvoiceProcessor.Issue(request().requestKey(),7,1,List.of(new ProductInvoiceProcessor.Selected(10,4),new ProductInvoiceProcessor.Selected(11,4)),""),auth);
+  var captor=org.mockito.ArgumentCaptor.forClass(CustomerTransaction.class);verify(transactions).saveAndFlush(captor.capture());
+  assertEquals(new BigDecimal("-100.00"),captor.getValue().getAmount());
+  verify(access).branch(user,2L);
+  verify(db).update("INSERT INTO product_invoice_claims(product_id,invoice_id) VALUES(?,?)",11L,42L);
+ }
+ @Test void companyFilterIsAppliedBeforePagination() {
+  when(access.admin(user)).thenReturn(true);service.ready(0,7L,auth);
+  verify(db).queryForList(contains("AND o.commerce_partner_id=?"),eq(7L),eq(0));
+ }
+ @Test void cancelledOrderCannotCreateInvoice() {
+  when(db.queryForObject("SELECT COUNT(*) FROM orders WHERE OrderNo=? AND StatusOrder IN (5,10)",Long.class,1L)).thenReturn(1L);
+  var error=assertThrows(PreviewException.class,()->service.issue(request(),auth));
+  assertEquals("Замовлення скасоване",error.getMessage());
+  verify(invoices,never()).saveAndFlush(any());verifyNoInteractions(orchestrator);
+ }
+ @Test void wrongResellerCannotBeCharged() {
+  resellerFixture(8,"OWN");assertThrows(PreviewException.class,()->service.issue(request(),auth));verifyNoInteractions(orchestrator);
+  verify(invoices,never()).saveAndFlush(any());
+ }
+ @Test void companyPaymentCannotBelongToResellerCashDesk() {
+  resellerFixture(7,"RESELLER");assertThrows(PreviewException.class,()->service.issue(request(),auth));verifyNoInteractions(orchestrator);
+  verify(invoices,never()).saveAndFlush(any());
+ }
+ @Test void mergeCannotTransferCompanyDebtToAnotherPayer() {
+  when(db.queryForList("SELECT partner_id FROM invoice_commercial_owner WHERE invoice_id=?",Long.class,11L)).thenReturn(List.of(8L));
+  when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,11L)).thenReturn(8L);
+  when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,12L)).thenReturn(8L);
+  assertThrows(PreviewException.class,()->service.merge(new ProductInvoiceProcessor.Merge("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",7,1,List.of(11L,12L),""),auth));
+  verifyNoInteractions(orchestrator);verify(invoices,never()).saveAndFlush(any());
  }
  @Test void pendingReturnAndOpenReworkCannotBeBilled() {
   product.put("pending_location","WORKSHOP");
