@@ -1,16 +1,21 @@
 package com.example.baget.partnerpayments;
+
+import com.example.baget.calculation.preview.PreviewException;
 import com.example.baget.finance.CustomerPaymentAccess;
 import com.example.baget.users.User;
-import com.example.baget.calculation.preview.PreviewException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
-import java.util.*;
+
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 class PartnerPaymentServiceTest {
  JdbcTemplate db;CustomerPaymentAccess access;PartnerPaymentService service;Authentication auth;User user;
  ObjectMapper json=new ObjectMapper();Map<String,Object> order;
@@ -22,7 +27,7 @@ class PartnerPaymentServiceTest {
   when(auth.getName()).thenReturn("manager");when(access.user(auth)).thenReturn(user);
   service=spy(new PartnerPaymentService(db,access,json));
   doReturn(new HashMap<>(Map.of("customerId",10L,"branchNo",1L,"partnerId",20L,"mode","RESELLER"))).when(service).context(100L,10L,1L,auth);
-  when(db.queryForObject(startsWith("SELECT COALESCE(SUM(CASE"),eq(BigDecimal.class),eq(10L),eq(20L))).thenReturn(n("100"));
+  when(db.queryForObject(startsWith("SELECT COALESCE(SUM(advance_delta)"),eq(BigDecimal.class),eq(10L),eq(20L))).thenReturn(n("100"));
   order=new HashMap<>(Map.of("orderNo",100L,"branchNo",1L,"status",3,"total",n("200"),"paid",n("50"),"pricePending",0L,"unfinished",0L,"incomplete",0L));
   when(db.queryForList(startsWith("SELECT o.OrderNo AS orderNo"),eq(10L),eq(20L),eq(100L))).thenAnswer(i->List.of(new HashMap<>(order)));
  }
@@ -51,7 +56,7 @@ class PartnerPaymentServiceTest {
   assertThrows(PreviewException.class,()->service.pay(10,request(100L,"99","50"),auth));verify(db,never()).update(anyString(),any(Object[].class));
  }
  @Test void allocationCannotSpendBalanceConsumedByAnotherBranch(){
-  when(db.queryForObject(startsWith("SELECT COALESCE(SUM(CASE"),eq(BigDecimal.class),eq(10L),eq(20L))).thenReturn(n("10"));
+  when(db.queryForObject(startsWith("SELECT COALESCE(SUM(advance_delta)"),eq(BigDecimal.class),eq(10L),eq(20L))).thenReturn(n("10"));
   assertThrows(PreviewException.class,()->service.pay(10,request(100L,"100","50"),auth));verify(db,never()).update(anyString(),any(Object[].class));
  }
  @Test void cancelledOrPendingPriceOrderCannotBePaid(){

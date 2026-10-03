@@ -14,4 +14,21 @@ public final class PartnerPaymentRules {
   if(debt==null && allocation.signum()!=0)throw new IllegalArgumentException("Аванс можна використати лише для оплати замовлення");
   if(debt!=null && cash.add(allocation).compareTo(debt)>0)throw new IllegalArgumentException("Сума перевищує борг. Надлишок прийміть окремим авансом");
  }
+ public record Deltas(BigDecimal cash,BigDecimal advance,BigDecimal paid) {}
+ public static Deltas reverse(boolean advance,BigDecimal cash,BigDecimal allocation,BigDecimal balance,BigDecimal paid) {
+  money(cash);money(allocation);
+  if(advance){
+   if(cash.compareTo(balance)>0)throw new IllegalArgumentException("Цей аванс уже використано. Спочатку скасуйте помилкову оплату, що використала аванс");
+   return new Deltas(cash.negate(),cash.negate(),BigDecimal.ZERO);
+  }
+  BigDecimal applied=cash.add(allocation);
+  if(paid==null || applied.compareTo(paid)>0)throw new IllegalArgumentException("Частину оплати вже перенесено в аванс. Скасування призведе до від’ємної оплати замовлення");
+  return new Deltas(cash.negate(),allocation,applied.negate());
+ }
+ public static Deltas transfer(BigDecimal amount,BigDecimal total,BigDecimal paid) {
+  money(amount);
+  if(amount.signum()<=0 || total==null || amount.compareTo(paid.subtract(total))>0)
+   throw new IllegalArgumentException("Сума перенесення перевищує підтверджену переплату");
+  return new Deltas(BigDecimal.ZERO,amount,amount.negate());
+ }
 }
