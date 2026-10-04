@@ -37,6 +37,10 @@ public class CrmService {
   return named.queryForList("SELECT BranchNo AS id,BranchName AS name FROM branches WHERE BranchNo IN (:branches) ORDER BY BranchName",Map.of("branches",access(a)));
  }
  private static final String RELATIONS = """
+ SELECT customer_id AS customerId,branch_id AS branchNo FROM customer_transactions WHERE active=1
+ UNION
+ SELECT customer_id,branch_no FROM partner_customer_movements
+ UNION
  SELECT CustNo AS customerId,BranchNo AS branchNo FROM orders
  UNION
  SELECT COALESCE(i.payer_id,i.customer_id),o.BranchNo FROM invoices i
@@ -64,17 +68,22 @@ public class CrmService {
   // Global StringTrimmerEditor(true) converts empty query parameters to null.
   q=Objects.toString(q,"").trim();
   tab=tab==null||tab.isBlank()?"WORK":tab.trim();
+  if("PARTNER".equals(tab))tab="SETTLEMENT"; // Old clients no longer filter the retired manual flag.
+  boolean settlement=Set.of("SETTLEMENT","DEBT","ADVANCE","OVERDUE").contains(tab);
   Set<Long> allowed=access(a);
+  if(settlement && users.findByUsername(a.getName()).orElseThrow().getRoles().stream().noneMatch(role->Set.of("ROLE_ADMIN","ROLE_COUNTER","ROLE_ACCOUNTANT","ROLE_BOOKKEEPER","ROLE_MANAGER","ROLE_SELLER","ROLE_LEVEL2").contains(role.getName())))
+   throw fail(HttpStatus.FORBIDDEN,"Немає доступу до розрахунків клієнтів");
   if(branch!=null){if(!allowed.contains(branch))throw fail(HttpStatus.FORBIDDEN,"Цю філію не дозволено");allowed=Set.of(branch);}
-  if(!Set.of("WORK","READY","PARTNER").contains(tab)||page<0||page>100000||q.length()>100)
+  if(!Set.of("WORK","READY","SETTLEMENT","DEBT","ADVANCE","OVERDUE").contains(tab)||page<0||page>100000||q.length()>100)
    throw fail(HttpStatus.BAD_REQUEST,"Некоректні параметри пошуку");
-  String condition=all?"1=1":switch(tab){case "WORK"->"COALESCE(s.workingOrders,0)>0";case "READY"->"COALESCE(s.readyOrders,0)>0";default->"COALESCE(cp.is_partner,0)=1";};
+  String condition=settlement?CrmSettlementSql.condition(tab):all?"1=1":"READY".equals(tab)?"COALESCE(s.readyOrders,0)>0":"COALESCE(s.workingOrders,0)>0";
   String sql="""
    SELECT c.CustNo AS customerId,c.Company AS company,COALESCE(NULLIF(c.Mobile,''),c.Phone) AS mobile,
    r.branchNo,b.BranchName AS branchName,COALESCE(cp.is_partner,0) AS partner,
    COALESCE(cp.revision,0) AS revision,cp.next_contact_date AS nextContactDate,
    COALESCE(s.workingOrders,0) AS workingOrders,COALESCE(s.readyOrders,0) AS readyOrders,
    h.note AS lastNote,h.outcome AS lastOutcome,h.created_at AS lastContact,h.actor AS lastActor
+   """+(settlement?CrmSettlementSql.COLUMNS:"")+"""
    FROM (
    """+RELATIONS+"""
    ) r JOIN customer c ON c.CustNo=r.customerId JOIN branches b ON b.BranchNo=r.branchNo
@@ -105,7 +114,7 @@ public class CrmService {
   for(var row:visible)row.put("pickupOrders",pickupOrders(((Number)row.get("customerId")).longValue(),((Number)row.get("branchNo")).longValue()));
   return Map.of("rows",visible,"hasMore",rows.size()>50);
  }
- private void customer(long id,long branch,Authentication a) {
+ void customer(long id,long branch,Authentication a) {
   if(!access(a).contains(branch))throw fail(HttpStatus.FORBIDDEN,"Цю філію не дозволено");
   Long n=db.queryForObject("SELECT COUNT(*) FROM ("+RELATIONS+") r WHERE r.customerId=? AND r.branchNo=?",Long.class,id,branch);
   if(n==null||n==0)throw fail(HttpStatus.NOT_FOUND,"Клієнт не має замовлень або рахунків у цій філії");
@@ -116,10 +125,11 @@ public class CrmService {
   out.put("profile",profile(id,branch));
   out.put("pickupOrders",pickupOrders(id,branch));
   out.put("orders",db.queryForList("""
-   SELECT o.OrderNo AS orderNo,o.StatusOrder AS status,o.SaleDate AS saleDate,
+   SELECT o.OrderNo AS orderNo,o.StatusOrder AS status,o.SaleDate AS saleDate,o.commerce_mode AS commerceMode,pc.Company AS partnerName,
    p.id AS productId,p.client_product_id AS productName,p.production_state AS state,
    p.current_location AS location,p.pending_location AS pending
    FROM orders o LEFT JOIN order_products p ON p.order_no=o.OrderNo AND p.active=1
+   LEFT JOIN customer pc ON pc.CustNo=o.commerce_partner_id
    WHERE o.CustNo=? AND o.BranchNo=? ORDER BY o.OrderNo DESC,p.id LIMIT 201
    """,id,branch));
   out.put("invoices",db.queryForList("""

@@ -1,17 +1,22 @@
 package com.example.baget.crm;
-import com.example.baget.users.*;
+
 import com.example.baget.branch.Branch;
 import com.example.baget.calculation.preview.PreviewException;
+import com.example.baget.users.Role;
+import com.example.baget.users.User;
+import com.example.baget.users.UsersRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+
 import java.time.LocalDate;
 import java.util.*;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 class CrmServiceTest {
  JdbcTemplate db; UsersRepository users; CrmService service; Authentication auth;
  final String key="a70b4dd2-2b21-4089-97ea-0b7093c2a310";
@@ -98,6 +103,21 @@ class CrmServiceTest {
     .thenReturn(List.of());
   assertDoesNotThrow(()->service.list(null,null,null,false,false,0,auth));
   assertThrows(PreviewException.class,()->service.list(null,"UNKNOWN",null,false,false,0,auth));
+ }
+
+ @Test void foremanCannotListFinancialGroup(){
+  var u=users.findByUsername("manager").orElseThrow();var role=new Role();role.setName("ROLE_FOREMAN");u.setRoles(List.of(role));
+  var e=assertThrows(PreviewException.class,()->service.list(1L,"SETTLEMENT","",false,false,0,auth));
+  assertEquals(org.springframework.http.HttpStatus.FORBIDDEN,e.getStatus());verifyNoInteractions(db);
+ }
+ @Test void settlementsCannotQueryAnotherBranch(){
+  var e=assertThrows(PreviewException.class,()->service.list(2L,"SETTLEMENT","",false,false,0,auth));
+  assertEquals(org.springframework.http.HttpStatus.FORBIDDEN,e.getStatus());verifyNoInteractions(db);
+ }
+ @Test void retiredPartnerEndpointCannotWrite(){
+  var controller=new CrmController(service);
+  var e=assertThrows(PreviewException.class,()->controller.partner(10,1,new CrmService.Partner(key,0,true),auth));
+  assertEquals(org.springframework.http.HttpStatus.GONE,e.getStatus());verifyNoInteractions(db);
  }
 
 }

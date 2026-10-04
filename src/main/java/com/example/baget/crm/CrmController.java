@@ -19,7 +19,7 @@ public class CrmController {
  @PostMapping("/customers/{id}/branches/{branch}/contacts") public Object contact(@PathVariable("id") long id,@PathVariable("branch") long branch,
   @Valid @RequestBody CrmService.Contact r,Authentication a){return service.contact(id,branch,r,a);}
  @PostMapping("/customers/{id}/branches/{branch}/partner") public Object partner(@PathVariable("id") long id,@PathVariable("branch") long branch,
-  @Valid @RequestBody CrmService.Partner r,Authentication a){return service.partner(id,branch,r,a);}
+  @Valid @RequestBody CrmService.Partner r,Authentication a){throw new PreviewException(org.springframework.http.HttpStatus.GONE,"PARTNER_FLAG_RETIRED","Ручну позначку партнера прибрано. Користуйтеся вкладкою «Розрахунки».");}
  @PostMapping("/customers/{id}/branches/{branch}/orders/{order}/pickup")
  public Object pickup(@PathVariable("id") long id,@PathVariable("branch") long branch,@PathVariable("order") long order,
   @Valid @RequestBody CrmService.Pickup r,Authentication a){return service.pickup(id,branch,order,r,a);}
