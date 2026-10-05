@@ -76,6 +76,7 @@ public class WorkshopCalculationService {
             context.put("widthMm",r.widthMm());context.put("heightMm",r.heightMm());
             requests.add(convert(copy,EstimatePreviewRequest.Item.class));
         }
+        ProductAttachmentValidation.validate(requests);
         var pricingAuth=prices.consumptionOnly(a); // Only quantities/dimensions leave this method; monetary preview fields are discarded.
         var computed=preview.preview(new EstimatePreviewRequest(requests),pricingAuth);
         var original=convert(tree(product.get("calculation")),EstimatePreviewResponse.class);

@@ -14,14 +14,15 @@ import java.util.List;
 /** Internal composition, invoked within ProductPreviewService's read-only transaction. */
 @Component
 public class UnderframePreviewComposer {
+    private final com.example.baget.calculation.suspension.SuspensionPreviewService suspensions;
     private final PartsRepository parts;
     private final MaterialPreviewService materials;
     private final PartPriceResolver prices;
     private final UnderframeCrossbarService crossbars;
 
     public UnderframePreviewComposer(PartsRepository parts, MaterialPreviewService materials,
-                                     PartPriceResolver prices, UnderframeCrossbarService crossbars) {
-        this.parts = parts;
+                                     PartPriceResolver prices, UnderframeCrossbarService crossbars, com.example.baget.calculation.suspension.SuspensionPreviewService suspensions) {
+        this.parts = parts; this.suspensions=suspensions;
         this.materials = materials;
         this.prices = prices;
         this.crossbars = crossbars;
@@ -46,6 +47,12 @@ public class UnderframePreviewComposer {
         var lines = new ArrayList<ProductPreviewResponse.Line>();
         lines.add(new ProductPreviewResponse.Line("UNDERFRAME", "SELECTED", main));
 
+        if(request.suspension()!=null){
+            var choice=request.suspension();
+            if(Boolean.TRUE.equals(choice.includePozzi()))throw error("INVALID_UNDERFRAME_HANGER","Лапки не використовуються з підрамником");
+            var result=suspensions.preview(new com.example.baget.calculation.suspension.SuspensionPreviewRequest(request.widthMm(),request.productQuantity(),null,null,choice.hangerMode(),choice.hangerPartNo(),choice.hangersPerProduct(),false,choice.pozziPerProduct(),choice.includeCord()),auth);
+            lines.addAll(result.lines());
+        }
         // A small underframe neither needs a rail price nor includes a zero-value line.
         if (usage.consumption().segmentsPerProduct().isEmpty()) return List.copyOf(lines);
 

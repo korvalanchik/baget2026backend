@@ -17,8 +17,9 @@ public class ProductPaymentCheck {
     private final InvoiceRepository invoices;
     private final InvoiceFinanceService finance;
     private final EntityManager em;
-    public ProductPaymentCheck(JdbcTemplate db,InvoiceRepository invoices,InvoiceFinanceService finance,EntityManager em) {
-        this.db=db;this.invoices=invoices;this.finance=finance;this.em=em;
+    private final com.example.baget.payroll.RewardService rewards;
+    public ProductPaymentCheck(JdbcTemplate db,InvoiceRepository invoices,InvoiceFinanceService finance,EntityManager em,com.example.baget.payroll.RewardService rewards) {
+        this.db=db;this.invoices=invoices;this.finance=finance;this.em=em;this.rewards=rewards;
     }
     private boolean resellerProduct(long product) {
         return "RESELLER".equals(db.queryForObject("SELECT o.commerce_mode FROM order_products p JOIN orders o ON o.OrderNo=p.order_no WHERE p.id=?",String.class,product));
@@ -80,6 +81,7 @@ public class ProductPaymentCheck {
         return Map.of("invoice",lockedInvoice,"customer",invoice.getCustomer().getCustNo(),"branch",branch,"debt",debt,"due",due,"policyRevision",policy.get("revision"),"termsRevision",terms.get("revision"));
     }
     public void recordIssue(long product,long revision,boolean accept,String actor,Map<String,Object> snapshot) {
+        if(accept)rewards.accrue(product,actor);
         if(snapshot.isEmpty())return;
         db.update("INSERT INTO product_credit_issues(product_id,invoice_id,customer_id,branch_no,tracking_revision,action,debt,due_date,policy_revision,terms_revision,actor) VALUES(?,?,?,?,?,?,?,?,?,?,?)",product,snapshot.get("invoice"),snapshot.get("customer"),snapshot.get("branch"),revision,accept?"ACCEPT":"SEND",snapshot.get("debt"),snapshot.get("due"),snapshot.get("policyRevision"),snapshot.get("termsRevision"),actor);
     }

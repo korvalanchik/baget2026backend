@@ -60,7 +60,7 @@ class UnderframePreviewTest {
         when(repository.findById(28030L)).thenReturn(Optional.of(rail));
         var prices = new PartPriceResolver();
         var materials = new MaterialPreviewService(repository, new MaterialConsumptionService(), prices, factory.getValidator());
-        var composer = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030));
+        var composer = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030), org.mockito.Mockito.mock(com.example.baget.calculation.suspension.SuspensionPreviewService.class));
         service = new ProductPreviewService(new MirrorFrameRule(27760, 28540), repository,
                 materials, prices, factory.getValidator(), composer, mock(MirrorAccessoriesComposer.class));
         var builder = new Jackson2ObjectMapperBuilder();

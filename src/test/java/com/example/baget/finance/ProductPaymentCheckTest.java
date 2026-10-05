@@ -1,20 +1,30 @@
 package com.example.baget.finance;
-import com.example.baget.invoices.*;
+
 import com.example.baget.calculation.preview.PreviewException;
+import com.example.baget.invoices.Invoice;
+import com.example.baget.invoices.InvoiceEnums;
+import com.example.baget.invoices.InvoiceFinanceService;
+import com.example.baget.invoices.InvoiceRepository;
 import jakarta.persistence.EntityManager;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 class ProductPaymentCheckTest {
+ com.example.baget.payroll.RewardService rewards;
  CustomerCreditService credit;
  JdbcTemplate db;InvoiceRepository invoices;InvoiceFinanceService finance;EntityManager em;ProductPaymentCheck service;Invoice invoice;
  @BeforeEach void setup(){
   db=mock(JdbcTemplate.class);invoices=mock(InvoiceRepository.class);finance=mock(InvoiceFinanceService.class);em=mock(EntityManager.class);
-  service=new ProductPaymentCheck(db,invoices,finance,em);
+  rewards=mock(com.example.baget.payroll.RewardService.class);
+  service=new ProductPaymentCheck(db,invoices,finance,em,rewards);
   credit=mock(CustomerCreditService.class);
   org.springframework.test.util.ReflectionTestUtils.setField(service,"credit",credit);
   when(db.queryForObject(startsWith("SELECT o.BranchNo"),eq(Long.class),eq(14L))).thenReturn(1L);
@@ -56,4 +66,7 @@ class ProductPaymentCheckTest {
   verify(db).update(startsWith("INSERT INTO product_credit_issues"),eq(14L),eq(5L),eq(10L),eq(1L),eq(7L),eq("ACCEPT"),eq(new BigDecimal("300")),eq(java.time.LocalDate.of(2026,10,10)),eq(2L),eq(3L),eq("manager"));
  }
  @Test void permissionWithoutDateDoesNotAllowDebt(){when(finance.calculateInvoiceDebt(invoice)).thenReturn(BigDecimal.ONE);when(credit.policy(10,1)).thenReturn(Map.of("allowed",true,"revision",2L));assertThrows(PreviewException.class,()->service.checkIssue(14,5L));}
+ @Test void confirmedPaidHandoverAlsoAccruesReward(){service.recordIssue(14,7,true,"manager",Map.of());verify(rewards).accrue(14,"manager");}
+ @Test void pendingCustomerTransferDoesNotAccrueReward(){service.recordIssue(14,7,false,"manager",Map.of());verifyNoInteractions(rewards);}
+
 }

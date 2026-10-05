@@ -33,7 +33,7 @@ public class MountingPreviewService {
         prices.requireAuthenticated(auth);
         if (r == null || !validator.validate(r).isEmpty())
             throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Перевірте параметри натяжки");
-        try { MountingRules.validate(r); }
+        try { MountingRules.validate(r); if(r.suspension()!=null && r.mountingType()!=UNDERFRAME)throw new IllegalArgumentException("Підвіси натяжки дозволені тільки на підрамнику"); }
         catch (IllegalArgumentException ex) {
             throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_MOUNTING_SELECTION", ex.getMessage());
         }
@@ -48,7 +48,7 @@ public class MountingPreviewService {
         if (r.mountingType() == UNDERFRAME) {
             lines.addAll(underframes.compose(new ProductPreviewRequest(
                     ProductPreviewRequest.ProductType.UNDERFRAME, r.widthMm(), r.heightMm(),
-                    r.productQuantity(), null, null, r.underframePartNo()), auth));
+                    r.productQuantity(), null, null, r.underframePartNo(), null, r.suspension()), auth));
             long work = MountingRules.workPartNo(r.canvasType());
             configured(work, PartKind.WORK, CalculationMethod.PERIMETER, UnitType.METER, Map.of());
             lines.add(materialLine(work, "STRETCH_WORK", "UNDERFRAME_STRETCH_RULE", r, auth));

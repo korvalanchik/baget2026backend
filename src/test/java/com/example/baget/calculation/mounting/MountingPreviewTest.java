@@ -65,7 +65,7 @@ class MountingPreviewTest {
         when(rail.getInQuality()).thenReturn(2.0);
         var prices = new PartPriceResolver();
         var materials = new MaterialPreviewService(repository, new MaterialConsumptionService(), prices, factory.getValidator());
-        var composer = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030));
+        var composer = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030), org.mockito.Mockito.mock(com.example.baget.calculation.suspension.SuspensionPreviewService.class));
         service = new MountingPreviewService(repository, materials, prices, composer, factory.getValidator());
         var builder = new Jackson2ObjectMapperBuilder();
         new JacksonConfig().jacksonCustomizer().customize(builder);

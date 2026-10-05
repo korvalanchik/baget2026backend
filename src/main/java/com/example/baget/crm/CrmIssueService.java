@@ -83,7 +83,10 @@ public class CrmIssueService {
   }
   boolean allIssued=locked.stream().allMatch(p->requested.containsKey(num(p,"id")) || "CUSTOMER".equals(p.get("location")));
   if(allIssued)db.update("UPDATE orders SET StatusOrder=12,ClientReceivedDate=CURRENT_TIMESTAMP(6) WHERE OrderNo=?",order);
-  String eventNote="Видано виробів: "+requested.size()+". Номери: "+requested.keySet()+". "+note;
+  String articles=locked.stream().filter(p->requested.containsKey(num(p,"id")))
+   .map(p->Objects.toString(p.get("productName"),"артикул не вказано"))
+   .collect(java.util.stream.Collectors.joining(", "));
+  String eventNote="Замовлення № "+order+". Видано виробів: "+requested.size()+". Артикули: "+articles+". "+note;
   if(eventNote.length()>2000)eventNote=eventNote.substring(0,2000);
   db.update("INSERT INTO crm_contacts(request_key,request_json,customer_id,branch_no,outcome,note,order_no,actor) VALUES(?,?,?,?,'PICKUP_ISSUED',?,?,?)",r.requestKey(),encode(r),customer,branch,eventNote,order,a.getName());
   return Map.of("issued",true,"duplicate",false,"allIssued",allIssued,"productIds",requested.keySet());

@@ -67,7 +67,7 @@ class SheetCompositionTest {
         var validator = factory.getValidator(); var prices = new PartPriceResolver();
         var materials = new MaterialPreviewService(repository, new MaterialConsumptionService(), prices, validator);
         suspensions = new SuspensionPreviewService(repository, materials, prices, validator);
-        var underframes = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030));
+        var underframes = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030), suspensions);
         products = new ProductPreviewService(new MirrorFrameRule(27760,28540), repository, materials, prices,
                 validator, underframes, new MirrorAccessoriesComposer(repository,materials,suspensions));
         estimates = new EstimatePreviewService(products, new MountingPreviewService(repository,materials,prices,underframes,validator), prices, validator);
@@ -426,6 +426,43 @@ class SheetCompositionTest {
         var result=products.preview(request,auth("ROLE_LEVEL2"));
         var line=result.lines().stream().filter(l->l.role().equals("UNDERFRAME_FASTENER")).findFirst().orElseThrow();
         eq("4",line.calculation().consumptionPerProduct());eq("8",line.calculation().totalConsumption());
+    }
+
+    @Test void unframedUnderframeIncludesHangersAndCordWithoutCrossbars() throws Exception {
+        part(28060,CalculationMethod.PERIMETER,UnitType.METER,100);
+        when(catalog.get(28060L).getCalculationParams()).thenReturn(Map.of("railWidthMm",n("20")));
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+        String json="""
+        {"productType":"UNDERFRAME","widthMm":300,"heightMm":400,"productQuantity":2,"underframePartNo":28060,
+         "suspension":{"hangerMode":"AUTO","includePozzi":false,"includeCord":true}}
+        """;
+        var result=products.preview(mapper.readValue(json,ProductPreviewRequest.class),auth("ROLE_LEVEL2"));
+        var hanger=result.lines().stream().filter(l->l.role().equals("HANGER")).findFirst().orElseThrow();
+        assertEquals(14460L,hanger.calculation().partNo());eq("4",hanger.calculation().totalConsumption());
+        var cord=result.lines().stream().filter(l->l.role().equals("CORD")).findFirst().orElseThrow();
+        eq("0.8",cord.calculation().totalConsumption());
+        assertFalse(result.lines().stream().anyMatch(l->l.role().equals("CROSSBAR")));
+        part(5140,CalculationMethod.PERIMETER,UnitType.METER,10);
+        when(catalog.get(5140L).getPartKind()).thenReturn(PartKind.WORK);
+        var mounting=mapper.readValue("""
+        {"items":[{"clientItemId":"stretch","kind":"MOUNTING","mounting":{
+         "mountingType":"UNDERFRAME","canvasType":"EMBROIDERY","widthMm":300,"heightMm":400,"productQuantity":2,"underframePartNo":28060,
+         "suspension":{"hangerMode":"AUTO","includePozzi":false,"includeCord":true}}}]}
+        """,EstimatePreviewRequest.class);
+        var mounted=estimates.preview(mounting,auth("ROLE_LEVEL2")).items().get(0).mounting();
+        assertEquals(1,mounted.lines().stream().filter(l->l.role().equals("CORD")).count());
+        assertEquals(1,mounted.lines().stream().filter(l->l.role().equals("HANGER")).count());
+        var noCord=products.preview(mapper.readValue(json.replace("\"includeCord\":true","\"includeCord\":false"),ProductPreviewRequest.class),auth("ROLE_LEVEL2"));
+        assertFalse(noCord.lines().stream().anyMatch(l->l.role().equals("CORD")));
+        var crocodile=mapper.readValue(json.replace("\"hangerMode\":\"AUTO\"","\"hangerMode\":\"MANUAL\",\"hangerPartNo\":14450"),ProductPreviewRequest.class);
+        assertEquals("INVALID_SUSPENSION_SELECTION",assertThrows(PreviewException.class,()->products.preview(crocodile,auth("ROLE_LEVEL2"))).getCode());
+    }
+    @Test void antiframeRejectsPvcWithoutDvp() throws Exception {
+        var request=new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
+        {"productType":"UNFRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
+         "glass":[{"partNo":27540,"quantityPerProduct":1}],"backings":[{"partNo":27520,"quantityPerProduct":1}],"antiFrame":true}
+        """,ProductPreviewRequest.class);
+        assertEquals("INVALID_ANTIFRAME",assertThrows(PreviewException.class,()->products.preview(request,auth("ROLE_LEVEL2"))).getCode());
     }
 }
 

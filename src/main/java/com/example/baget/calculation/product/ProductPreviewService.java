@@ -40,8 +40,9 @@ public class ProductPreviewService {
         validateSelection(request);
         SheetComposition.validate(request);
         if(Boolean.TRUE.equals(request.antiFrame()) && (request.productType()!=ProductPreviewRequest.ProductType.UNFRAMED_ARTWORK
-                || SheetComposition.glass(request).isEmpty() || SheetComposition.backings(request).isEmpty()))
-            throw new PreviewException(HttpStatus.BAD_REQUEST,"INVALID_ANTIFRAME","Антирама потребує скла/дзеркала та задника, без багета");
+                || request.framePartNo()!=null || request.underframePartNo()!=null || SheetComposition.glass(request).isEmpty()
+                || SheetComposition.backings(request).stream().noneMatch(x->x.partNo()==4460L)))
+            throw new PreviewException(HttpStatus.BAD_REQUEST,"INVALID_ANTIFRAME","Антирама потребує скла/дзеркала та ДВП 4460, без рами й підрамника");
         if(Boolean.TRUE.equals(request.includeUnderframeFasteners()) && (request.productType()!=ProductPreviewRequest.ProductType.FRAMED_ARTWORK
                 || request.underframePartNo()==null || !java.util.Set.of(28060L,28020L,28210L,29720L).contains(request.underframePartNo())))
             throw new PreviewException(HttpStatus.BAD_REQUEST,"INVALID_UNDERFRAME_FASTENERS","Кріплення потребує багета та вибраного підрамника");
@@ -108,13 +109,13 @@ public class ProductPreviewService {
                     && r.underframePartNo() == null
                     && (!SheetComposition.glass(r).isEmpty() || !SheetComposition.backings(r).isEmpty() || !SheetComposition.mats(r).isEmpty());
             case UNDERFRAME -> r.underframePartNo() != null && r.framePartNo() == null && r.mirrorPartNo() == null
-                    && r.backingPartNo() == null && r.suspension() == null && r.backingLayers() == null
+                    && r.backingPartNo() == null && r.backingLayers() == null
                     && r.glassPartNo() == null && r.glassLayers() == null && r.matPartNo() == null
                     && r.matLayers() == null && r.matMargins() == null
                     && r.glass() == null && r.backings() == null && r.mats() == null;
         };
         if (!valid) throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_PRODUCT_SELECTION",
-                "UNFRAMED_ARTWORK: листові матеріали без рами та підвісу; MIRROR_IN_FRAME: рама й дзеркало, опційно задник і підвіс; FRAMED_ARTWORK: рама, опційно скло, паспарту, задник і підвіс; UNDERFRAME: лише підрамник");
+                "UNFRAMED_ARTWORK: листові матеріали без рами, опційно підвіс для задника; MIRROR_IN_FRAME: рама й дзеркало, опційно задник і підвіс; FRAMED_ARTWORK: рама, опційно скло, паспарту, задник і підвіс; UNDERFRAME: підрамник, опційно підвіси та шнурок");
     }
 
     private static ProductPreviewResponse summarize(ProductPreviewRequest request,

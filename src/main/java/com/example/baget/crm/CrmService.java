@@ -130,7 +130,10 @@ public class CrmService {
    p.current_location AS location,p.pending_location AS pending
    FROM orders o LEFT JOIN order_products p ON p.order_no=o.OrderNo AND p.active=1
    LEFT JOIN customer pc ON pc.CustNo=o.commerce_partner_id
-   WHERE o.CustNo=? AND o.BranchNo=? ORDER BY o.OrderNo DESC,p.id LIMIT 201
+   WHERE o.CustNo=? AND o.BranchNo=?
+   AND ((p.id IS NOT NULL AND (p.current_location IS NULL OR p.current_location<>'CUSTOMER'))
+     OR (p.id IS NULL AND o.StatusOrder<>12))
+   ORDER BY o.OrderNo DESC,p.id LIMIT 201
    """,id,branch));
   out.put("invoices",db.queryForList("""
    SELECT DISTINCT i.id,i.invoice_no AS invoiceNo,i.status,i.lifecycle
@@ -138,10 +141,26 @@ public class CrmService {
    WHERE (i.customer_id=? OR i.payer_id=?) AND o.BranchNo=? ORDER BY i.id DESC LIMIT 201
    """,id,id,branch));
   var events=db.queryForList("""
-   SELECT e.id,e.outcome,e.note,e.order_no AS orderNo,e.invoice_id AS invoiceId,i.invoice_no AS invoiceNo,e.next_contact_date AS nextContactDate,e.pickup_date AS pickupDate,
+   SELECT e.id,e.outcome,e.note,e.request_json AS requestJson,e.order_no AS orderNo,e.invoice_id AS invoiceId,i.invoice_no AS invoiceNo,e.next_contact_date AS nextContactDate,e.pickup_date AS pickupDate,
    e.actor,e.created_at AS createdAt FROM crm_contacts e LEFT JOIN invoices i ON i.id=e.invoice_id
    WHERE e.customer_id=? AND e.branch_no=? ORDER BY e.id DESC LIMIT 51 OFFSET ?
    """,id,branch,page*50);
+  for(var event:events) {
+   Object request=event.remove("requestJson");
+   if(!"PICKUP_ISSUED".equals(event.get("outcome")) || request==null || event.get("orderNo")==null || !Objects.toString(event.get("note"),"").contains(". Номери: "))continue;
+   // Older events stored database IDs in their note. Resolve only the products selected in that event.
+   try {
+    var payload=json.readTree(request.toString());
+    var ids=new ArrayList<Long>();for(var item:payload.path("products"))if(item.path("productId").canConvertToLong())ids.add(item.path("productId").asLong());
+    if(ids.isEmpty())continue;
+    var args=new HashMap<String,Object>();args.put("order",event.get("orderNo"));args.put("ids",ids);
+    var names=named.queryForList("SELECT client_product_id FROM order_products WHERE order_no=:order AND id IN (:ids) ORDER BY id",args,String.class);
+    if(names.size()!=ids.size())continue;
+    event.put("note","Замовлення № "+event.get("orderNo")+". Видано виробів: "+ids.size()+". Артикули: "+String.join(", ",names)+". "+payload.path("note").asText(""));
+   } catch(com.fasterxml.jackson.core.JsonProcessingException | IllegalArgumentException ex) {
+    // Preserve the original historical text when a legacy payload cannot be decoded.
+   }
+  }
   out.put("history",events.subList(0,Math.min(50,events.size())));out.put("hasMore",events.size()>50);
   return out;
  }

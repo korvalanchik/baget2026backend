@@ -59,6 +59,7 @@ public class CalculatedOrderService {
         var ids=new HashSet<String>();int count=0;
         for(var p:r.products()) {
             if(!ids.add(p.clientProductId()) || !p.form().isObject() || encode(p.form()).length()>32000) throw bad("Некоректна конфігурація виробу");
+            ProductAttachmentValidation.validate(p.components());
             count+=p.components().size();
         }
         if(count>50) throw bad("Кошторис може містити до 50 складових");

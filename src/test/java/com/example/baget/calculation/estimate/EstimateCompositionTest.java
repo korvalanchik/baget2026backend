@@ -47,7 +47,7 @@ class EstimateCompositionTest {
         var prices = new PartPriceResolver();
         var validator = factory.getValidator();
         var materials = new MaterialPreviewService(repository, new MaterialConsumptionService(), prices, validator);
-        var underframes = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030));
+        var underframes = new UnderframePreviewComposer(repository, materials, prices, new UnderframeCrossbarService(28030), org.mockito.Mockito.mock(com.example.baget.calculation.suspension.SuspensionPreviewService.class));
         var products = new ProductPreviewService(new MirrorFrameRule(27760, 28540), repository,
                 materials, prices, validator, underframes, mock(MirrorAccessoriesComposer.class));
         var mountings = new MountingPreviewService(repository, materials, prices, underframes, validator);
