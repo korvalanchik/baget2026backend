@@ -121,6 +121,7 @@ public class ProductionService {
                 db.update("UPDATE parts SET OnHand=? WHERE PartNo=?",after,l.partNo());
                 db.update("INSERT INTO inventory_movements(order_no,item_no,part_no,quantity_delta,stock_before,stock_after,actor) VALUES(?,?,?,?,?,?,?)",
                     id,l.itemNo(),l.partNo(),l.actual().negate(),before,after,auth.getName());
+                ConsumptionCost.capture(db,id,l.itemNo());
             }
             db.update("UPDATE items SET Qty=?,Width=?,Height=?,actual_amount=?,`Sum`=? WHERE OrderNo=? AND ItemNo=?",
                 l.actual(),l.widthMm()==null?null:l.widthMm().movePointLeft(3),l.heightMm()==null?null:l.heightMm().movePointLeft(3),amount,amount,id,l.itemNo());

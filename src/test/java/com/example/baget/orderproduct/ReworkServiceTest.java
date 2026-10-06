@@ -85,7 +85,12 @@ class ReworkServiceTest {
         verify(db).update("INSERT INTO inventory_movements(order_no,item_no,part_no,quantity_delta,stock_before,stock_after,actor) VALUES(?,?,?,?,?,?,?)",1L,4L,100L,n("-2"),n("10"),n("8"),"master");
         verify(reservations).releaseProduct(10,"master");
         assertTrue(mutatingSql().stream().anyMatch(s->s.startsWith("INSERT INTO items(")));
-        assertFalse(mutatingSql().stream().anyMatch(s->s.startsWith("UPDATE items ")));
+        // The new item's inventory valuation may be filled after its movement is posted.
+        // Existing items and their original consumption must remain untouched.
+        String snapshotUpdate="UPDATE items i JOIN inventory_movements m ON m.order_no=i.OrderNo AND m.item_no=i.ItemNo SET i.inventory_unit_cost=m.inventory_unit_cost WHERE i.OrderNo=? AND i.ItemNo=? AND m.inventory_cost_captured_at IS NOT NULL";
+        verify(db).update(snapshotUpdate,1L,4L);
+        assertEquals(1L,mutatingSql().stream().filter(s->s.startsWith("UPDATE items ")).count());
+        assertFalse(mutatingSql().stream().anyMatch(s->s.startsWith("UPDATE items ") && !s.equals(snapshotUpdate)));
         verify(db).update(startsWith("UPDATE order_products SET active_rework_id=NULL"),eq(n("100.00")),eq(4L),contains("\"additionalCharge\":0.00"),eq(10L));
     }
     @Test void customerChangeAddsOnlyIncrementalCharge() {

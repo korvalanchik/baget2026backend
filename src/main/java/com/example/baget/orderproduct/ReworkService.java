@@ -225,6 +225,7 @@ public class ReworkService {
                 var before=db.queryForObject("SELECT CAST(OnHand AS DECIMAL(24,6)) FROM parts WHERE PartNo=?",BigDecimal.class,part);var after=before.subtract(qty);
                 db.update("UPDATE parts SET OnHand=?,Version=COALESCE(Version,0)+1 WHERE PartNo=?",after,part);
                 db.update("INSERT INTO inventory_movements(order_no,item_no,part_no,quantity_delta,stock_before,stock_after,actor) VALUES(?,?,?,?,?,?,?)",orderNo,item,part,qty.negate(),before,after,a.getName());
+                ConsumptionCost.capture(db,orderNo,item);
             }
         }
         BigDecimal total=((BigDecimal)cycle.get("baseline_total")).add(added);long nextRevision=number(p.get("production_revision"))+1;
