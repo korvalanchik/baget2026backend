@@ -164,6 +164,8 @@ public class ProcurementService {
             same(prior.get(0),r,a);return read(id,a);
         }
         revision(o,r.expectedRevision());
+        db.queryForObject("SELECT VendorNo FROM vendors WHERE VendorNo=? FOR UPDATE",Long.class,o.get("vendorNo"));
+        if(!db.queryForList("SELECT id FROM priced_material_receipts WHERE vendor_no=? AND document_no=? AND document_date=?",Long.class,o.get("vendorNo"),r.documentNo().trim(),r.receivedDate()).isEmpty())throw conflict("Цю накладну вже проведено з собівартістю; повторний прихід заборонено");
         var selected=new LinkedHashMap<Long,BigDecimal>();
         for(var l:r.lines()) if(selected.put(l.lineId(),l.quantity())!=null) throw conflict("Дубль позиції приходу");
         var saved=new HashMap<Long,Map<String,Object>>();for(var l:lines(id))saved.put(number(l,"id"),l);
@@ -187,6 +189,7 @@ public class ProcurementService {
         for(var e:selected.entrySet()) {
             var l=saved.get(e.getKey());long pid=number(l,"partNo");var before=decimal(parts.get(pid),"stock");var after=before.add(e.getValue());
             String key=UUID.randomUUID().toString();
+            db.update("UPDATE parts SET inventory_unit_cost=NULL,inventory_cost_unit=NULL WHERE PartNo=?",pid);
             db.update("UPDATE parts SET OnHand=?,Version=COALESCE(Version,0)+1 WHERE PartNo=?",after,pid);
             // Same stock history as single-position receiving; supplier references are explicit, not parsed from text.
             db.update("INSERT INTO material_stock_operations(request_key,part_no,operation,quantity,stock_before,stock_after,actor,note,request_json) VALUES(?,?,'RECEIPT',?,?,?,?,?,?)",key,pid,e.getValue(),before,after,a.getName(),"Поставка № "+id+", накладна "+r.documentNo().trim(),encode(Map.of("supplierOrderId",id,"receiptId",receipt,"quantity",e.getValue())));

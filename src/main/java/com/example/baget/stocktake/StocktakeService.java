@@ -21,8 +21,9 @@ import java.util.*;
 public class StocktakeService {
  private final JdbcTemplate db;private final UsersRepository users;private final InventoryReservations reservations;private final ObjectMapper json;
  public StocktakeService(JdbcTemplate db,UsersRepository users,InventoryReservations reservations,ObjectMapper json){this.db=db;this.users=users;this.reservations=reservations;this.json=json;}
+ @org.springframework.beans.factory.annotation.Autowired private CountUnitService countUnits;
  public record Create(@NotBlank @Size(max=36) String requestKey,@NotNull LocalDate date,@NotBlank @Size(max=1000) String note,@NotEmpty @Size(max=200) List<@NotNull @Positive Long> parts) {}
- public record Count(@Positive long partNo,@DecimalMin("0") @DecimalMax("999999999") @Digits(integer=9,fraction=6) BigDecimal quantity,@NotNull @Size(max=1000) String note) {}
+ public record Count(@Positive long partNo,@DecimalMin("0") @DecimalMax("999999999") @Digits(integer=9,fraction=6) BigDecimal quantity,@NotNull @Size(max=1000) String note,@Valid CountUnitService.Input countInput) { public Count(long partNo,BigDecimal quantity,String note){this(partNo,quantity,note,null);} }
  public record Save(@PositiveOrZero long expectedRevision,@NotNull LocalDate date,@NotBlank @Size(max=1000) String note,@NotEmpty @Size(max=200) List<@NotNull @Valid Count> lines) {}
  public record Revision(@PositiveOrZero long expectedRevision) {}
  public record Recount(@PositiveOrZero long expectedRevision,@NotBlank @Size(max=1000) String reason,@NotEmpty @Size(max=200) List<@NotNull @Positive Long> parts) {}
@@ -54,11 +55,14 @@ public class StocktakeService {
   var ids=unique(r.lines().stream().map(Count::partNo).toList());var old=lines(id);reservations.lockParts(ids);
   var existing=new HashMap<Long,Map<String,Object>>();for(var l:old)existing.put(number(l,"partNo"),l);
   for(var c:r.lines()){
-   var st=stamp(c.partNo());unit(st);if(c.quantity()!=null)quantity(st.unit(),c.quantity());
+   var st=stamp(c.partNo());unit(st);
+   var breakdown=c.countInput()==null?null:countUnits.calculate(c.partNo(),st.unit(),c.countInput());
+   BigDecimal counted=breakdown==null?c.quantity():breakdown.total();
+   if(counted!=null)quantity(st.unit(),counted);
    if(existing.containsKey(c.partNo())) {
     // Saving a count does not silently acknowledge intervening movements or change its baseline.
-    db.update("UPDATE stocktake_lines SET counted_qty=?,note=? WHERE document_id=? AND part_no=?",c.quantity(),c.note().trim(),id,c.partNo());
-   } else {if(c.quantity()!=null)throw conflict("Спочатку збережіть додавання нового матеріалу, потім внесіть його підрахунок");addLine(id,c.partNo(),st,null,c.note().trim());}
+    db.update("UPDATE stocktake_lines SET counted_qty=?,note=?,count_breakdown=? WHERE document_id=? AND part_no=?",counted,c.note().trim(),breakdown==null?null:encode(breakdown),id,c.partNo());
+   } else {if(counted!=null)throw conflict("Спочатку збережіть додавання нового матеріалу, потім внесіть його підрахунок");addLine(id,c.partNo(),st,null,c.note().trim());}
   }
   for(long p:existing.keySet())if(!ids.contains(p))db.update("DELETE FROM stocktake_lines WHERE document_id=? AND part_no=?",id,p);
   db.update("UPDATE stocktake_documents SET document_date=?,note=?,revision=revision+1 WHERE id=?",r.date(),r.note().trim(),id);
@@ -69,7 +73,7 @@ public class StocktakeService {
   var before=lines(id);var existing=new HashSet<Long>();for(var l:before)existing.add(number(l,"partNo"));
   if(!existing.containsAll(ids))throw conflict("У документі немає обраного матеріалу");
   reservations.lockParts(ids);var changes=new ArrayList<Object>();
-  for(long p:ids){var st=stamp(p);unit(st);db.update("UPDATE stocktake_lines SET baseline=?,baseline_stock=?,unit=?,counted_qty=NULL WHERE document_id=? AND part_no=?",encode(st),st.stock(),st.unit(),id,p);changes.add(Map.of("partNo",p,"baseline",st));}
+  for(long p:ids){var st=stamp(p);unit(st);db.update("UPDATE stocktake_lines SET baseline=?,baseline_stock=?,unit=?,counted_qty=NULL,count_breakdown=NULL WHERE document_id=? AND part_no=?",encode(st),st.stock(),st.unit(),id,p);changes.add(Map.of("partNo",p,"baseline",st));}
   bump(id);event(id,r.expectedRevision()+1,"RECOUNT",Map.of("reason",r.reason(),"before",before,"lines",changes),a);return read(id,a);
  }
  public Map<String,Object> cancel(long id,Cancel r,Authentication a){access(a);var doc=header(id,true);draft(doc,r.expectedRevision());db.update("UPDATE stocktake_documents SET status='CANCELLED',revision=revision+1 WHERE id=?",id);event(id,r.expectedRevision()+1,"CANCEL",r,a);return read(id,a);}
@@ -83,7 +87,7 @@ public class StocktakeService {
    var row=new LinkedHashMap<String,Object>();row.put("partNo",p);row.put("description",l.get("description"));row.put("unit",l.get("unit"));row.put("baseline",baseline);row.put("current",st);row.put("counted",counted);row.put("difference",StocktakeRules.difference(st.stock(),counted));row.put("note",l.get("note"));row.put("changed",moved);row.put("configured",configured);row.put("reservations",allocations);
    if(counted!=null && configured)quantity(st.unit(),counted);
    boolean reasonMissing=counted!=null&&(st.stock()==null||!StocktakeRules.same(st.stock(),counted))&&Objects.toString(l.get("note"),"").isBlank();
-   row.put("reasonMissing",reasonMissing);
+   row.put("reasonMissing",reasonMissing);if(l.get("countBreakdown")!=null)row.put("countBreakdown",l.get("countBreakdown"));
    if(moved||!configured||counted==null||reasonMissing)valid=false;
    if(allocations.stream().anyMatch(x->x.after().compareTo(x.before())<0))approval=true;
    result.add(row);
@@ -130,7 +134,7 @@ public class StocktakeService {
  private void unit(Stamp st){if(!"MATERIAL".equals(st.kind())||!Set.of("METER","SQUARE_METER","PIECE").contains(Objects.toString(st.unit(),"")))throw conflict("Матеріал має бути налаштований як складський: м / м² / шт");}
  private void quantity(String unit,BigDecimal qty){try{ProcurementRules.quantity(unit,qty,true);}catch(IllegalArgumentException e){throw conflict(e.getMessage());}}
  private void addLine(long id,long part,Stamp stamp,BigDecimal count,String note){String description=db.queryForObject("SELECT Description FROM parts WHERE PartNo=?",String.class,part);db.update("INSERT INTO stocktake_lines(document_id,part_no,description,unit,baseline,baseline_stock,counted_qty,note) VALUES(?,?,?,?,?,?,?,?)",id,part,Objects.toString(description,""),stamp.unit(),encode(stamp),stamp.stock(),count,note);}
- private List<Map<String,Object>> lines(long id){return db.queryForList("SELECT part_no AS partNo,description,unit,baseline,baseline_stock AS baselineStock,counted_qty AS counted,note FROM stocktake_lines WHERE document_id=? ORDER BY part_no",id);}
+ private List<Map<String,Object>> lines(long id){var result=db.queryForList("SELECT part_no AS partNo,description,unit,baseline,baseline_stock AS baselineStock,counted_qty AS counted,note,count_breakdown AS countBreakdown FROM stocktake_lines WHERE document_id=? ORDER BY part_no",id);for(var line:result){Object raw=line.get("countBreakdown");if(raw!=null)line.put("countBreakdown",decode(raw,CountUnitService.Result.class));}return result;}
  private Map<String,Object> header(long id,boolean lock){db.queryForObject("SELECT id FROM stocktake_documents WHERE id=?"+(lock?" FOR UPDATE":" FOR SHARE"),Long.class,id);return db.queryForMap("SELECT id,request_key,request_json,revision,status,document_date AS date,note,actor,created_at AS createdAt,posted_at AS postedAt,posted_by AS postedBy,post_key,post_request,posted_snapshot FROM stocktake_documents WHERE id=?",id);}
  private TreeSet<Long> unique(List<Long> ids){var result=new TreeSet<>(ids);if(result.size()!=ids.size()||result.isEmpty()||result.size()>200)throw conflict("Додайте від 1 до 200 різних матеріалів");return result;}
  private void draft(Map<String,Object> doc,long rev){if(!"DRAFT".equals(doc.get("status")))throw conflict("Змінювати можна лише чернетку акта");if(number(doc,"revision")!=rev)throw conflict("Акт змінено іншим користувачем. Відкрийте його повторно");}

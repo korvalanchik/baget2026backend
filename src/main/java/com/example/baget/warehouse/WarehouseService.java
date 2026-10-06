@@ -129,7 +129,7 @@ public class WarehouseService {
     }
     public Map<String,Object> material(long id,Authentication a) {
         stockAccess(a);
-        var p=db.queryForMap("SELECT PartNo AS partNo,Description AS description,unit_type AS unit,CAST(OnHand AS DECIMAL(24,6)) AS onHand FROM parts WHERE PartNo=? AND part_kind='MATERIAL'",id);
+        var p=db.queryForMap("SELECT PartNo AS partNo,Description AS description,unit_type AS unit,CAST(OnHand AS DECIMAL(24,6)) AS onHand,CASE WHEN inventory_cost_unit=unit_type THEN inventory_unit_cost ELSE NULL END AS inventoryUnitCost FROM parts WHERE PartNo=? AND part_kind='MATERIAL'",id);
         p.put("reservations",db.queryForList("SELECT r.order_product_id AS productId,r.demand,r.reserved,p.order_no AS orderNo FROM material_reservations r JOIN order_products p ON p.id=r.order_product_id WHERE r.part_no=? AND r.active=1 ORDER BY r.id",id));
         p.put("history",db.queryForList("SELECT operation,quantity,stock_before AS stockBefore,stock_after AS stockAfter,actor,note,created_at AS createdAt FROM material_stock_operations WHERE part_no=? ORDER BY id DESC LIMIT 100",id));
         p.put("consumption",db.queryForList("SELECT order_no AS orderNo,item_no AS itemNo,quantity_delta AS quantity,actor,created_at AS createdAt FROM inventory_movements WHERE part_no=? ORDER BY id DESC LIMIT 100",id));
@@ -162,6 +162,7 @@ public class WarehouseService {
         try {after=WarehouseRules.stockAfter(before,r.operation(),r.quantity());}catch(IllegalArgumentException e){throw conflict(e.getMessage());}
         var reserved=db.queryForObject("SELECT COALESCE(SUM(reserved),0) FROM material_reservations WHERE part_no=? AND active=1",BigDecimal.class,id);
         if(after.compareTo(reserved)<0) throw conflict("Фактичний залишок менший за резерв. Спочатку узгодьте резерви; інвентаризація не скасовує їх автоматично");
+        if("RECEIPT".equals(r.operation()))db.update("UPDATE parts SET inventory_unit_cost=NULL,inventory_cost_unit=NULL WHERE PartNo=?",id);
         db.update("UPDATE parts SET OnHand=?,Version=COALESCE(Version,0)+1 WHERE PartNo=?",after,id);
         db.update("INSERT INTO material_stock_operations(request_key,part_no,operation,quantity,stock_before,stock_after,actor,note,request_json) VALUES(?,?,?,?,?,?,?,?,?)",r.requestKey(),id,r.operation(),r.quantity(),before,after,a.getName(),r.note(),json.valueToTree(r).toString());
         reservations.refillPart(id,a.getName());

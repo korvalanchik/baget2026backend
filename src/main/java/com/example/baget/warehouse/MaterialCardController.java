@@ -52,7 +52,7 @@ public class MaterialCardController {
     ||(from!=null&&to!=null&&from.isAfter(to))|| (to!=null&&to.equals(LocalDate.MAX)))
    throw new PreviewException(HttpStatus.BAD_REQUEST,"INVALID_FILTER","Перевірте період і тип операції");
   var result=new LinkedHashMap<String,Object>();
-  for(String key:List.of("partNo","description","unit","onHand","reservations"))result.put(key,detail.get(key));
+  for(String key:List.of("partNo","description","unit","onHand","inventoryUnitCost","reservations"))result.put(key,detail.get(key));
   var sums=db.queryForMap("SELECT COALESCE(SUM(demand),0) AS demand,COALESCE(SUM(reserved),0) AS reserved FROM material_reservations WHERE part_no=? AND active=1",id);
   var demand=new BigDecimal(sums.get("demand").toString());var reserved=new BigDecimal(sums.get("reserved").toString());
   result.putAll(sums);result.put("shortage",demand.subtract(reserved).max(BigDecimal.ZERO));
