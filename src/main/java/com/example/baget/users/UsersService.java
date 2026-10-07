@@ -42,7 +42,7 @@ public class UsersService {
     }
 
     public void delete(final Long userNo) {
-        userRepository.deleteById(userNo);
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Використовуйте блокування користувача у Налаштуваннях, щоб зберегти історію");
     }
 
     private UserDTO mapToDTO(final User user, final UserDTO userDTO) {
@@ -108,6 +108,7 @@ public class UsersService {
 
         User user = recoveryToken.getUser();
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setAccessRevision(user.getAccessRevision()+1);
         userRepository.save(user);
 
         // Видалити токен після успішної зміни паролю

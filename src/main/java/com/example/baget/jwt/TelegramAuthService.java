@@ -147,6 +147,7 @@ public class TelegramAuthService {
 
         // Завантажуємо UserDetails через UserDetailsService
         UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        if (!userDetails.isEnabled()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "User disabled"));
 
         // Генеруємо JWT токен
         String jwtToken = jwtTokenUtil.generateToken(userDetails);

@@ -71,6 +71,8 @@ public class JwtTokenUtil implements Serializable {
     // генерація токену для користувача
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
+        if (!userDetails.isEnabled()) throw new org.springframework.security.authentication.DisabledException("User disabled");
+        if (userDetails instanceof VersionedUserDetails v) claims.put("accessRevision",v.getAccessRevision());
         return doGenerateToken(claims, userDetails.getUsername());
     }
 
@@ -88,6 +90,9 @@ public class JwtTokenUtil implements Serializable {
     // перевірка токену
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = getUsernameFromToken(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        Object revision=getAllClaimsFromToken(token).get("accessRevision");
+        long tokenRevision=revision instanceof Number n?n.longValue():0;
+        boolean current=!(userDetails instanceof VersionedUserDetails v)||v.getAccessRevision()==tokenRevision;
+        return (userDetails.isEnabled() && current && username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
 }

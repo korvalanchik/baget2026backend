@@ -28,6 +28,12 @@ public class User {
     private String password;
 
     @Column(nullable = false)
+    private boolean enabled = true;
+
+    @Column(name = "access_revision", nullable = false)
+    private long accessRevision;
+
+    @Column(nullable = false)
     private String email;
 
     @Column(unique = true, nullable = true)

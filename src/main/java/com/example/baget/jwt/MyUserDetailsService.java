@@ -30,9 +30,10 @@ public class MyUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("User not found with username: " + username);
         }
         // Перетворення об'єкта User на UserDetails
-        return new org.springframework.security.core.userdetails.User(
+        return new VersionedUserDetails(
                 user.getUsername(),
                 user.getPassword(),
+                user.isEnabled(), user.getAccessRevision(),
                 mapRolesToAuthorities(user.getRoles())
         );
     }
