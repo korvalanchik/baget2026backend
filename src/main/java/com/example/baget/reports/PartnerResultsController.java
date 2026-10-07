@@ -53,12 +53,12 @@ public class PartnerResultsController {
  GROUP BY co.partner_id,c.Company ORDER BY c.Company,co.partner_id
  """;
  @GetMapping public Object report(@RequestParam("from") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,@RequestParam("to") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to,@RequestParam(name="partner",required=false) Long partner,@RequestParam(name="branch",required=false) Long branch,@RequestParam(name="page",defaultValue="0") int page,Authentication a){
-  access(a);if(from==null||to==null||to.isBefore(from)||ChronoUnit.DAYS.between(from,to)>365||page<0||page>200||partner!=null&&partner<=0||branch!=null&&branch<=0)throw new PreviewException(HttpStatus.BAD_REQUEST,"REPORT_FILTER","Вкажіть коректний період до 366 днів і фільтри");
+  access(a);if(from==null||to==null||to.isBefore(from)||ChronoUnit.DAYS.between(from,to)>365||page<-1||page>200||partner!=null&&partner<=0||branch!=null&&branch<=0)throw new PreviewException(HttpStatus.BAD_REQUEST,"REPORT_FILTER","Вкажіть коректний період до 366 днів і фільтри");
   var zone=ZoneId.of("Europe/Kyiv");var rows=db.queryForList(SALES,Timestamp.from(from.atStartOfDay(zone).toInstant()),Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()),partner,partner,branch,branch);
   if(rows.size()>10000)throw new PreviewException(HttpStatus.BAD_REQUEST,"REPORT_LIMIT","Понад 10000 позицій. Зменшіть період або оберіть фірму/філію");
   var summary=OwnerResultsMath.summarize(rows);summary.put("invoiceCount",rows.stream().map(r->r.get("invoiceId")).distinct().count());
   var debts=db.queryForList(DEBTS,partner,partner);BigDecimal debtTotal=debts.stream().map(r->new BigDecimal(r.get("debt").toString())).reduce(BigDecimal.ZERO,BigDecimal::add);
-  int start=Math.min(page*50,rows.size()),end=Math.min(start+50,rows.size());
+  int start=page<0?0:Math.min(page*50,rows.size()),end=page<0?rows.size():Math.min(start+50,rows.size());
   return Map.of("summary",summary,"rows",rows.subList(start,end),"hasMore",end<rows.size(),"page",page,"debts",debts,"debtTotal",debtTotal,"from",from,"to",to);
  }
  @ExceptionHandler(PreviewException.class) public ResponseEntity<?> error(PreviewException e){return ResponseEntity.status(e.getStatus()).body(Map.of("message",e.getMessage()));}
