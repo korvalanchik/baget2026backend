@@ -51,6 +51,9 @@ public class LedgerEntry {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
 
+    @Column(name = "cash_account_id")
+    private Long cashAccountId;
+
     // 🔹 Дата створення запису
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

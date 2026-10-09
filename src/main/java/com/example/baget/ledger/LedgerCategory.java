@@ -2,6 +2,8 @@ package com.example.baget.ledger;
 
 public enum LedgerCategory {
 
+    CASH_OPENING, CASH_TRANSFER, MANAGER_REWARD,
+
     // 💰 CASH INFLOW
     PAYMENT_RECEIVED,          // гроші від клієнта
     CUSTOMER_ADVANCE,          // аванс від клієнта

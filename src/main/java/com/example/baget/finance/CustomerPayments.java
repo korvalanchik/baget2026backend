@@ -38,7 +38,9 @@ public class CustomerPayments {
     public record Payment(@NotBlank @Size(max=36) String requestKey,@Positive long branchNo,@Positive Long invoiceId,
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal amount,
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal allocationAmount,
-        @Size(max=2000) String note) {}
+        @Size(max=2000) String note,@Positive Long cashAccountId) {
+        public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,null);}
+    }
     public com.fasterxml.jackson.databind.JsonNode pay(long customer,Payment r,Authentication a) {
         var u=access.user(a);access.customer(u,customer,r.branchNo());
         try { if(!UUID.fromString(r.requestKey()).toString().equals(r.requestKey())) throw new IllegalArgumentException(); }
@@ -59,7 +61,7 @@ public class CustomerPayments {
             if(r.amount().add(r.allocationAmount()).compareTo(invoiceFinance.calculateInvoiceDebt(invoice))>0)
                 throw conflict("Сума перевищує поточний борг. Оновіть дані; надлишок можна внести окремим авансом");
         } else if(r.allocationAmount().signum()!=0) throw conflict("Не можна використати аванс без рахунку");
-        var request=new InvoicePaymentRequest(r.branchNo(),r.invoiceId(),customer,r.amount(),r.allocationAmount(),r.note());
+        var request=new InvoicePaymentRequest(r.branchNo(),r.invoiceId(),customer,r.amount(),r.allocationAmount(),r.note(),r.cashAccountId());
         var result=r.invoiceId()==null?settlement.settleAdvance(request,a):settlement.settleInvoice(request,a);
         db.update("INSERT INTO customer_payment_requests(request_key,customer_id,branch_no,actor,payload,result) VALUES(?,?,?,?,?,?)",r.requestKey(),customer,r.branchNo(),a.getName(),encode(r),encode(result));
         return tree(encode(result));
@@ -67,7 +69,7 @@ public class CustomerPayments {
     private Payment parsePayment(String v) { try{return json.readValue(v,Payment.class);}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);} }
     static boolean same(Payment a,Payment b) {
         return a.requestKey().equals(b.requestKey()) && a.branchNo()==b.branchNo() && Objects.equals(a.invoiceId(),b.invoiceId())
-            && a.amount().compareTo(b.amount())==0 && a.allocationAmount().compareTo(b.allocationAmount())==0 && Objects.equals(a.note(),b.note());
+            && a.amount().compareTo(b.amount())==0 && a.allocationAmount().compareTo(b.allocationAmount())==0 && Objects.equals(a.note(),b.note()) && Objects.equals(a.cashAccountId(),b.cashAccountId());
     }
     private String encode(Object v) { try{return json.writeValueAsString(v);}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);} }
     private com.fasterxml.jackson.databind.JsonNode tree(String v) { try{return json.readTree(v);}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);} }

@@ -8,11 +8,14 @@ import org.springframework.stereotype.Service;
 public class LedgerService {
     private final LedgerRepository ledgerRepository;
 
-    public void createEntry(LedgerRequest request) {
+    public void createEntry(LedgerRequest request) { createEntry(request,null); }
+
+    public void createEntry(LedgerRequest request,Long cashAccountId) {
 
         ledgerRepository.save(
                 LedgerEntry.builder()
                         .branch(request.branch())
+                        .cashAccountId(cashAccountId)
                         .direction(request.direction())
                         .category(request.category())
                         .amount(request.amount())

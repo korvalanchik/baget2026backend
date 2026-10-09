@@ -38,7 +38,7 @@ public class InvoiceOperationContextService {
             Invoice invoice = invoiceRepository.findById(request.invoiceId())
                     .orElseThrow(() -> new TransactionException("Інвойс не знайдено"));
 
-            Branch branch = resolveInvoiceBranch(invoice.getId());
+            Branch branch = request.branchNo()==null ? resolveInvoiceBranch(invoice.getId()) : branchRepository.findById(request.branchNo()).orElseThrow(()->new TransactionException("Філію приймання коштів не знайдено"));
 
             validateBranchAccess(user, branch.getBranchNo());
 

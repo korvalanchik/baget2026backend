@@ -23,6 +23,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PaymentOrchestrator {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.baget.cash.CashService cash;
     private final List<PaymentProcessor> processors;
     private final LedgerService ledgerService;
     private final CustomerTransactionMapper customerTransactionMapper;
@@ -38,6 +40,7 @@ public class PaymentOrchestrator {
             throw new TransactionException("Сума оплати має бути більше 0");
         }
 
+        long cashAccountId=cash.paymentAccount(user,ctx.branch().getBranchNo(),request.cashAccountId());
         OffsetDateTime now = OffsetDateTime.now();
 
         List<PaymentProcessor> matchedProcessors  = processors.stream()
@@ -54,7 +57,7 @@ public class PaymentOrchestrator {
 
         // 🔥 Ledger через один API
         for (CustomerTransaction tx : txs) {
-            ledgerService.createEntry(buildLedgerRequest(ctx, tx, user, now, request.note()));
+            ledgerService.createEntry(buildLedgerRequest(ctx, tx, user, now, request.note()),cashAccountId);
         }
 
         if(ctx.invoice()!=null) invoiceFinanceService.refreshInvoiceStatus(ctx.invoice());

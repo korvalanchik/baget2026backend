@@ -185,7 +185,9 @@ public class ProductInvoiceProcessor {
  public record Payment(@NotBlank @Size(max=36) String requestKey,
      @NotNull @DecimalMin("0") @Digits(integer=15,fraction=2) BigDecimal amount,
      @NotNull @DecimalMin("0") @Digits(integer=15,fraction=2) BigDecimal allocationAmount,
-     @NotNull @Positive @Digits(integer=15,fraction=2) BigDecimal expectedDebt,@Size(max=1000) String note){}
+     @NotNull @Positive @Digits(integer=15,fraction=2) BigDecimal expectedDebt,@Size(max=1000) String note,@Positive Long cashAccountId){
+  public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note){this(requestKey,amount,allocationAmount,expectedDebt,note,null);}
+ }
  public Map<String,Object> pay(long id,Payment r,Authentication a){
   var user=access.user(a);access.invoice(user,id);
   if(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,id)==0)throw conflict("Це рахунок старого формату");
@@ -196,7 +198,7 @@ public class ProductInvoiceProcessor {
   var debt=ledger.calculateInvoiceDebt(id);
   if(debt.compareTo(r.expectedDebt())!=0)throw conflict("Борг змінився. Оновіть рахунок перед оплатою");
   if(r.amount().add(r.allocationAmount()).signum()<=0 || r.amount().add(r.allocationAmount()).compareTo(debt)>0)throw conflict("Сума оплати та авансу повинна бути додатною й не перевищувати борг");
-  settlement.settleInvoice(new InvoicePaymentRequest(null,id,null,r.amount(),r.allocationAmount(),r.note()),a);
+  settlement.settleInvoice(new InvoicePaymentRequest(null,id,null,r.amount(),r.allocationAmount(),r.note(),r.cashAccountId()),a);
   em.flush();finish(r.requestKey(),id);return read(id,a);
  }
  public Map<String,Object> merge(Merge r,Authentication a){

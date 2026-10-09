@@ -45,19 +45,23 @@ class ProductionFinanceTest {
         var customer=new Customer(); customer.setCustNo(7L);
         var invoice=Invoice.builder().id(42L).invoiceNo(21092026001L).build();
         var request=new InvoicePaymentRequest(1L,42L,7L,new BigDecimal("120"),BigDecimal.ZERO,"");
-        var ctx=new InvoiceOperationContext(new User(),null,customer,customer,invoice);
+        var branch=new com.example.baget.branch.Branch();branch.setBranchNo(1L);
+        var ctx=new InvoiceOperationContext(new User(),branch,customer,customer,invoice);
         var payment=CustomerTransaction.builder().id(1L).type(CustomerTransactionType.PAYMENT).amount(new BigDecimal("100")).build();
         var advance=CustomerTransaction.builder().id(2L).type(CustomerTransactionType.ADVANCE).amount(new BigDecimal("20")).build();
         when(processor.supports(request)).thenReturn(true);
         when(processor.process(eq(ctx),eq(request),any())).thenReturn(List.of(payment,advance));
         var service=new PaymentOrchestrator(List.of(processor),ledger,mapper,finance);
+        var cash=mock(com.example.baget.cash.CashService.class);
+        when(cash.paymentAccount(ctx.user(),1L,null)).thenReturn(5L);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"cash",cash);
         service.processPayment(ctx,request,ctx.user());
         var entries=ArgumentCaptor.forClass(LedgerRequest.class);
-        verify(ledger,times(2)).createEntry(entries.capture());
+        verify(ledger,times(2)).createEntry(entries.capture(),eq(5L));
         assertEquals(42L,entries.getAllValues().get(0).invoiceId());
         assertNull(entries.getAllValues().get(1).invoiceId());
         var order=inOrder(ledger,finance);
-        order.verify(ledger,times(2)).createEntry(any());
+        order.verify(ledger,times(2)).createEntry(any(),eq(5L));
         order.verify(finance).refreshInvoiceStatus(invoice);
     }
 }
