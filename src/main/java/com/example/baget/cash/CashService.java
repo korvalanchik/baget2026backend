@@ -70,6 +70,45 @@ public class CashService {
   var transfers=db.queryForList("SELECT t.*,(SELECT CONCAT(n.observed_amount,' грн: ',n.note) FROM cash_transfer_notes n WHERE n.transfer_id=t.id ORDER BY n.id DESC LIMIT 1) AS discrepancy,s.name AS sourceName,d.name AS destinationName,s.branch_no AS sourceBranch,d.branch_no AS destinationBranch FROM cash_transfers t JOIN cash_accounts s ON s.id=t.source_id JOIN cash_accounts d ON d.id=t.destination_id WHERE t.state='SENT' ORDER BY t.id").stream().filter(t->editor(u)||u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==num(t,"sourceBranch"))).toList();
   return Map.of("accounts",visible,"transfers",transfers,"destinations",db.queryForList("SELECT id,name,kind FROM cash_accounts WHERE kind='CENTRAL_CASH' AND initialized=1"),"canEdit",editor(u),"canConfigure",role(u,"ROLE_ADMIN"));}
  public Object journal(long id,int page,Authentication a){var u=user(a);view(u,account(id));if(page<0||page>100000)throw bad("Некоректна сторінка");var rows=db.queryForList("SELECT l.id,l.direction,l.category,l.amount,l.created_at AS createdAt,l.cash_transfer_id AS transferId,l.reward_entry_id AS rewardEntryId,l.reference,l.note,u.username AS actor FROM ledger_entries l LEFT JOIN users u ON u.id=l.created_by WHERE l.cash_account_id=? ORDER BY l.id DESC LIMIT 51 OFFSET ?",id,page*50);return Map.of("rows",rows.subList(0,Math.min(50,rows.size())),"hasMore",rows.size()>50);}
+ // Calendar boundaries match the existing cash receipts report (Europe/Kyiv).
+ static final java.time.ZoneId CASH_ZONE=java.time.ZoneId.of("Europe/Kyiv");
+ private java.time.LocalDate today(){return java.time.LocalDate.now(CASH_ZONE);}
+ private void cashDesk(User u,Map<String,Object> acc){view(u,acc);if(!Set.of("BRANCH_CASH","CENTRAL_CASH").contains(acc.get("kind")))throw bad("Звірка готівки доступна лише для кас");ready(acc);}
+ private CashDayMath.Snapshot daySnapshot(long id,java.time.LocalDate day){
+  var start=java.sql.Timestamp.from(day.atStartOfDay(CASH_ZONE).toInstant());
+  var end=java.sql.Timestamp.from(day.plusDays(1).atStartOfDay(CASH_ZONE).toInstant());
+  return CashDayMath.summarize(db.queryForList("SELECT CASE WHEN created_at<? THEN 'BEFORE' ELSE 'DAY' END AS period,direction,category,SUM(amount) AS amount,MAX(id) AS lastId FROM ledger_entries WHERE cash_account_id=? AND created_at<? GROUP BY period,direction,category ORDER BY period,category,direction",start,id,end));
+ }
+ public Object reconciliationDay(long id,java.time.LocalDate day,Authentication a){
+  var u=user(a);cashDesk(u,account(id));var current=today();if(day==null)day=current;
+  if(day.isAfter(current))throw bad("Не можна переглянути майбутній день");
+  return Map.of("day",day,"today",current,"canSave",day.equals(current),"totals",daySnapshot(id,day));
+ }
+ public record Reconcile(@NotBlank String requestKey,@Positive long accountId,@NotNull java.time.LocalDate day,
+  @Min(0) long lastLedgerId,@NotNull BigDecimal expectedAmount,
+  @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal actualAmount,
+  @Size(max=1000) String note){}
+ public Object reconcile(Reconcile r,Authentication a){
+  var u=user(a);serialize();cashDesk(u,account(r.accountId()));
+  var saved=prior("RECONCILE",r.requestKey(),r,u);if(saved!=null)return saved;
+  if(!today().equals(r.day()))throw bad("Фактичну готівку можна звірити лише за поточний день. Оновіть форму");
+  var snapshot=daySnapshot(r.accountId(),r.day());
+  try{CashDayMath.verify(snapshot,r.lastLedgerId(),r.expectedAmount(),r.actualAmount(),r.note());}
+  catch(IllegalArgumentException e){throw bad(e.getMessage());}
+  var difference=r.actualAmount().subtract(snapshot.expected());
+  db.update("INSERT INTO cash_reconciliations(account_id,business_day,last_ledger_id,expected_amount,actual_amount,difference,actor,note,snapshot) VALUES(?,?,?,?,?,?,?,?,?)",r.accountId(),r.day(),snapshot.lastLedgerId(),snapshot.expected(),r.actualAmount(),difference,u.getUsername(),r.note()==null?"":r.note().trim(),encode(snapshot));
+  long id=db.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+  return remember("RECONCILE",r.requestKey(),r,Map.of("id",id,"difference",difference,"message","Звірку збережено. Залишок каси не змінено"),u);
+ }
+ public Object reconciliationHistory(long id,int page,Authentication a){
+  var u=user(a);view(u,account(id));if(page<0||page>100000)throw bad("Некоректна сторінка");
+  var rows=db.queryForList("SELECT id,business_day AS day,created_at AS createdAt,actor,expected_amount AS expected,actual_amount AS actual,difference,note,snapshot FROM cash_reconciliations WHERE account_id=? ORDER BY id DESC LIMIT 51 OFFSET ?",id,page*50);
+  return Map.of("rows",rows.subList(0,Math.min(50,rows.size())),"hasMore",rows.size()>50);
+ }
+ public Object reconciliationDifferences(Authentication a){
+  var u=user(a);if(!role(u,"ROLE_ADMIN"))throw denied();
+  return db.queryForList("SELECT r.id,r.account_id AS accountId,a.name AS accountName,r.business_day AS day,r.created_at AS createdAt,r.expected_amount AS expected,r.actual_amount AS actual,r.difference,r.actor,r.note FROM cash_reconciliations r JOIN cash_accounts a ON a.id=r.account_id WHERE r.id=(SELECT MAX(x.id) FROM cash_reconciliations x WHERE x.account_id=r.account_id) AND r.difference<>0 ORDER BY r.id DESC");
+ }
  static long num(Map<String,Object> m,String k){return ((Number)m.get(k)).longValue();}static BigDecimal decimal(Map<String,Object> m,String k){return new BigDecimal(m.get(k).toString());}static boolean yes(Object o){return Boolean.TRUE.equals(o)||o instanceof Number n&&n.intValue()==1;}
  static PreviewException bad(String m){return new PreviewException(HttpStatus.CONFLICT,"CASH_CONFLICT",m);}static PreviewException denied(){return new PreviewException(HttpStatus.FORBIDDEN,"CASH_ACCESS","Немає доступу до касової операції");}
 }

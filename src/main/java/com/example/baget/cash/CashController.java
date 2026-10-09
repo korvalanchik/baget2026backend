@@ -17,5 +17,9 @@ public class CashController {
  @PostMapping("/opening") public Object opening(@RequestBody @Valid CashService.Opening r,Authentication a){return service.opening(r,a);}
  @PostMapping("/transfers") public Object send(@RequestBody @Valid CashService.Send r,Authentication a){return service.send(r,a);}
  @PostMapping("/receive") public Object receive(@RequestBody @Valid CashService.Receive r,Authentication a){return service.receive(r,a);}
+ @GetMapping("/accounts/{id}/day") public Object day(@PathVariable("id") long id,@RequestParam(name="day",required=false) @org.springframework.format.annotation.DateTimeFormat(iso=org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate day,Authentication a){return service.reconciliationDay(id,day,a);}
+ @GetMapping("/accounts/{id}/reconciliations") public Object history(@PathVariable("id") long id,@RequestParam(name="page",defaultValue="0") int page,Authentication a){return service.reconciliationHistory(id,page,a);}
+ @GetMapping("/reconciliation-differences") public Object differences(Authentication a){return service.reconciliationDifferences(a);}
+ @PostMapping("/reconciliations") public Object reconcile(@RequestBody @Valid CashService.Reconcile r,Authentication a){return service.reconcile(r,a);}
  @ExceptionHandler(PreviewException.class) public ResponseEntity<?> error(PreviewException e){return ResponseEntity.status(e.getStatus()).body(Map.of("message",e.getMessage(),"code",e.getCode()));}
 }
