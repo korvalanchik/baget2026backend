@@ -24,6 +24,8 @@ import java.security.MessageDigest;
 @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
 public class CalculatedOrderService {
     @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationEventPublisher orderEvents;
+    @org.springframework.beans.factory.annotation.Autowired
     private com.example.baget.commercial.CommercialService commercial;
     private final JdbcTemplate db;
     private final EstimatePreviewService preview;
@@ -100,6 +102,7 @@ public class CalculatedOrderService {
         db.update("UPDATE orders SET commerce_mode=?,commerce_partner_id=? WHERE OrderNo=?",settings.get("mode"),settings.get("partnerId"),orderNo);
         persist(orderNo,1,priced,auth.getName());
         for(long id:ids) reservations.refillPart(id,auth.getName());
+        if(orderEvents!=null) orderEvents.publishEvent(new com.example.baget.telegram.OrderCopyCreated(orderNo));
         return read(orderNo,auth);
     }
     private long customer(CalculatedOrderRequest r) {
