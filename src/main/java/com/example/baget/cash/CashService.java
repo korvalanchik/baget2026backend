@@ -79,10 +79,14 @@ public class CashService {
   var end=java.sql.Timestamp.from(day.plusDays(1).atStartOfDay(CASH_ZONE).toInstant());
   return CashDayMath.summarize(db.queryForList("SELECT CASE WHEN created_at<? THEN 'BEFORE' ELSE 'DAY' END AS period,direction,category,SUM(amount) AS amount,MAX(id) AS lastId FROM ledger_entries WHERE cash_account_id=? AND created_at<? GROUP BY period,direction,category ORDER BY period,category,direction",start,id,end));
  }
+ @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public Object reconciliationDay(long id,java.time.LocalDate day,Authentication a){
-  var u=user(a);cashDesk(u,account(id));var current=today();if(day==null)day=current;
+  var u=user(a);var accounts=db.queryForList("SELECT * FROM cash_accounts WHERE id=?",id);if(accounts.isEmpty())throw bad("Касу не знайдено");cashDesk(u,accounts.get(0));var current=today();if(day==null)day=current;
   if(day.isAfter(current))throw bad("Не можна переглянути майбутній день");
-  return Map.of("day",day,"today",current,"canSave",day.equals(current),"totals",daySnapshot(id,day));
+  var snapshot=daySnapshot(id,day);
+  var confirmations=db.queryForList("SELECT id,last_ledger_id AS lastLedgerId,expected_amount AS expected,actual_amount AS actual,difference,actor,note,created_at AS createdAt FROM cash_reconciliations WHERE account_id=? AND business_day=? ORDER BY id DESC LIMIT 1",id,day);
+  var result=new LinkedHashMap<String,Object>();result.put("day",day);result.put("today",current);result.put("canSave",day.equals(current));result.put("totals",snapshot);
+  var latest=confirmations.isEmpty()?null:confirmations.get(0);result.put("confirmation",latest);result.put("status",CashDayMath.confirmation(snapshot.lastLedgerId(),snapshot.expected(),latest));return result;
  }
  public record Reconcile(@NotBlank String requestKey,@Positive long accountId,@NotNull java.time.LocalDate day,
   @Min(0) long lastLedgerId,@NotNull BigDecimal expectedAmount,

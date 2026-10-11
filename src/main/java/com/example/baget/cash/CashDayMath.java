@@ -26,6 +26,12 @@ public final class CashDayMath {
   }
   return new Snapshot(opening,in,out,opening.add(in).subtract(out),last,List.copyOf(movements));
  }
+ /** A zero-net transfer/reversal still invalidates a confirmation through its ledger id. */
+ public static String confirmation(long revision,BigDecimal expected,Map<String,Object> latest) {
+  if(latest==null)return "NONE";
+  if(((Number)latest.get("lastLedgerId")).longValue()!=revision||new BigDecimal(latest.get("expected").toString()).compareTo(expected)!=0)return "STALE";
+  return new BigDecimal(latest.get("difference").toString()).signum()==0?"CONFIRMED":"DIFFERENCE";
+ }
  public static void verify(Snapshot current,long expectedRevision,BigDecimal expectedAmount,BigDecimal actual,String note) {
   if(current.lastLedgerId()!=expectedRevision||expectedAmount==null||current.expected().compareTo(expectedAmount)!=0)
    throw new IllegalArgumentException("Рух коштів змінився. Оновіть звірку і перерахуйте готівку");
