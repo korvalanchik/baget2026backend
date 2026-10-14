@@ -1,6 +1,8 @@
 package com.example.baget.backup;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.auth.oauth2.IdTokenProvider;
 import com.example.baget.calculation.preview.PreviewException;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,8 +14,8 @@ import java.util.List;
 
 @Service
 public class BackupCloud {
- private final String job,credentialsFile;
- public BackupCloud(@Value("${backup.job:}") String job,@Value("${backup.drive-credentials-file:}") String credentialsFile) {this.job=job;this.credentialsFile=credentialsFile;}
+ private final String job,credentialsFile,directUrl;
+ public BackupCloud(@Value("${backup.job:}") String job,@Value("${backup.drive-credentials-file:}") String credentialsFile,@Value("${backup.direct-url:}") String directUrl) {this.job=job;this.credentialsFile=credentialsFile;this.directUrl=directUrl.replaceAll("/+$", "");}
  private static String token(GoogleCredentials credentials) throws IOException { credentials.refreshIfExpired(); return credentials.getAccessToken().getTokenValue(); }
  private static HttpURLConnection connection(String url,String token) throws IOException {
   var c=(HttpURLConnection) URI.create(url).toURL().openConnection();c.setConnectTimeout(10000);c.setReadTimeout(60000);c.setInstanceFollowRedirects(false);c.setRequestProperty("Authorization","Bearer "+token);return c;
@@ -40,4 +42,37 @@ public class BackupCloud {
    return new FilterInputStream(c.getInputStream()) { @Override public void close() throws IOException {try {super.close();}finally {c.disconnect();}} };
   } catch(IOException e) {c.disconnect();throw e;}
  }
+ public record DirectFile(InputStream stream,long size,String sha256) implements AutoCloseable {
+  @Override public void close() throws IOException {stream.close();}
+ }
+ public DirectFile direct() {
+  // Configuration only, never a URL supplied by the browser.
+  if(!directUrl.matches("https://[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.run\\.app"))
+   throw new PreviewException(HttpStatus.CONFLICT,"BACKUP_DIRECT_CONFIG","Пряме копіювання ще не підключено. Налаштуйте захищений сервіс і BACKUP_DIRECT_URL");
+  HttpURLConnection c=null;
+  try {
+   var credentials=GoogleCredentials.getApplicationDefault();
+   if(!(credentials instanceof IdTokenProvider provider)) throw new IOException("ID token unavailable");
+   var identity=IdTokenCredentials.newBuilder().setIdTokenProvider(provider).setTargetAudience(directUrl).build();
+   identity.refreshIfExpired();
+   c=connection(directUrl+"/dump",identity.getAccessToken().getTokenValue());
+   c.setReadTimeout(3300000);c.setRequestMethod("POST");c.setDoOutput(true);c.setFixedLengthStreamingMode(0);
+   c.getOutputStream().close();
+   int status=c.getResponseCode();
+   if(status==409) throw new PreviewException(HttpStatus.CONFLICT,"BACKUP_BUSY","Інша копія вже створюється. Спробуйте пізніше");
+   if(status!=200) throw new IOException("Direct backup unavailable");
+   long size=Long.parseLong(c.getHeaderField("X-Backup-Size"));
+   String sha=c.getHeaderField("X-Backup-SHA256");
+   if(size<=0 || sha==null || !sha.matches("[a-f0-9]{64}")) throw new IOException("Invalid backup metadata");
+   final var active=c;
+   return new DirectFile(new FilterInputStream(c.getInputStream()) {
+    @Override public void close() throws IOException {try{super.close();}finally{active.disconnect();}}
+   },size,sha);
+  } catch(PreviewException e) {if(c!=null)c.disconnect();throw e;}
+  catch(IOException|IllegalArgumentException e) {
+   if(c!=null)c.disconnect();
+   throw new PreviewException(HttpStatus.CONFLICT,"BACKUP_DIRECT_FAILED","Не вдалося створити пряму копію. Перевірте налаштування сервісу, доступ до MySQL та таймаути Cloud Run");
+  }
+ }
+
 }

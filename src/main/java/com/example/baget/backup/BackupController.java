@@ -23,4 +23,21 @@ public class BackupController {
    in.transferTo(response.getOutputStream());
   }
  }
+ @PostMapping("/direct-download") public void direct(Authentication a,HttpServletResponse response) throws IOException {
+  service.admin(a);
+  try(var file=cloud.direct()) {
+   String name="baget-direct-"+java.time.Instant.now().toString().replace(":", "-")+".sql.gz";
+   response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
+   response.setHeader(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(name).build().toString());
+   response.setHeader("X-Backup-Size",Long.toString(file.size()));
+   response.setHeader("X-Backup-SHA256",file.sha256());
+   response.setHeader("Access-Control-Expose-Headers","X-Backup-Size, X-Backup-SHA256");
+   response.setContentType("application/gzip");
+   // Do not buffer the archive in the backend heap or set Content-Length.
+   byte[] buffer=new byte[256*1024];int read;
+   var out=response.getOutputStream();
+   while((read=file.stream().read(buffer))!=-1){out.write(buffer,0,read);out.flush();}
+  }
+ }
+
 }
