@@ -123,7 +123,7 @@ class FrameAssortmentServiceTest {
         part.put("activeCount", 3L);
         part.put("purchaseStatus", "BLOCKED");
         part.put("purchaseRevision", 4L);
-        when(db.queryForList(startsWith("SELECT p.PartNo AS partNo"), any(Object[].class)))
+        when(db.queryForList(startsWith("SELECT p.PartNo AS partNo"), eq(""), eq(""), eq(0), eq(0)))
                 .thenReturn(new ArrayList<>(List.of(part)));
 
         var result = service.matrix("", 0, false, auth);
@@ -142,7 +142,7 @@ class FrameAssortmentServiceTest {
         service.history(10, auth);
 
         var sql = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(db).queryForList(sql.capture(), any(Object[].class));
+        verify(db).queryForList(sql.capture(), eq(10L), eq(2L));
         assertTrue(sql.getValue().contains("e.branch_no IN (?)"));
         assertFalse(sql.getValue().contains("e.branch_no IS NULL"));
     }
