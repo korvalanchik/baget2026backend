@@ -112,6 +112,42 @@ class FrameAssortmentServiceTest {
     }
 
     @Test
+    void courierMatrixDoesNotExposeStockOrGlobalPurchasePolicy() {
+        setCourierWithAssignedBranch();
+        var part = new HashMap<String, Object>();
+        part.put("partNo", 10L);
+        part.put("description", "Profile");
+        part.put("method", "FRAME_PROFILE");
+        part.put("unit", "METER");
+        part.put("stock", 12);
+        part.put("activeCount", 3L);
+        part.put("purchaseStatus", "BLOCKED");
+        part.put("purchaseRevision", 4L);
+        when(db.queryForList(startsWith("SELECT p.PartNo AS partNo"), any(Object[].class)))
+                .thenReturn(new ArrayList<>(List.of(part)));
+
+        var result = service.matrix("", 0, false, auth);
+        @SuppressWarnings("unchecked")
+        var rows = (List<Map<String, Object>>) result.get("rows");
+        assertEquals(1, rows.size());
+        assertFalse(rows.get(0).containsKey("stock"));
+        assertFalse(rows.get(0).containsKey("purchaseStatus"));
+        assertFalse(rows.get(0).containsKey("purchaseRevision"));
+        assertEquals(0L, rows.get(0).get("activeCount"));
+    }
+
+    @Test
+    void courierHistoryQueryExcludesGlobalPurchaseEvents() {
+        setCourierWithAssignedBranch();
+        service.history(10, auth);
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(db).queryForList(sql.capture(), any(Object[].class));
+        assertTrue(sql.getValue().contains("e.branch_no IN (?)"));
+        assertFalse(sql.getValue().contains("e.branch_no IS NULL"));
+    }
+
+    @Test
     void unknownBranchAndInvalidStatusRejected() {
         assertThrows(PreviewException.class, () -> service.sample(10, 99, change(0, "ACTIVE"), auth));
         assertThrows(PreviewException.class, () -> service.sample(10, 2, change(0, "OTHER"), auth));
