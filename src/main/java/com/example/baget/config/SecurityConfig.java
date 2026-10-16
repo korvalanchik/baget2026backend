@@ -7,12 +7,14 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -58,7 +60,29 @@ public class SecurityConfig {
                         .requestMatchers("/api/qrcode/invoices/public/**").permitAll()
                         .requestMatchers("/api/chat").permitAll()
                         .requestMatchers("/scale/**").permitAll()
-                        .anyRequest().authenticated())
+                        .anyRequest().access((authentication, context) -> {
+                            var current = authentication.get();
+                            if (current == null || !current.isAuthenticated() || current instanceof AnonymousAuthenticationToken) {
+                                return new AuthorizationDecision(false);
+                            }
+                            var authorities = current.getAuthorities().stream()
+                                    .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                                    .collect(java.util.stream.Collectors.toSet());
+                            boolean courierOnly = authorities.contains("ROLE_COURIER")
+                                    && !authorities.contains("ROLE_ADMIN");
+                            if (!courierOnly) {
+                                return new AuthorizationDecision(true);
+                            }
+
+                            // Couriers must not use other authenticated APIs even if they
+                            // combine ROLE_COURIER with another non-admin role.
+                            String path = context.getRequest().getServletPath();
+                            boolean allowed = "/auth/check-role".equals(path)
+                                    || "/api/branch/manager".equals(path)
+                                    || "/api/warehouse/assortment".equals(path)
+                                    || path.startsWith("/api/warehouse/assortment/");
+                            return new AuthorizationDecision(allowed);
+                        }))
                 .authenticationManager(authenticationManager)
 
 //        We need jwt filter before the UsernamePasswordAuthenticationFilter.
