@@ -25,4 +25,4 @@ jobs:
           java-version: "17"
           cache: gradle
       - name: Run unit and integration tests
-        run: ./gradlew clean test
+        run: bash ./gradlew clean test
