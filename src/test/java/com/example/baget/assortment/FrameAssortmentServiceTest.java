@@ -125,6 +125,11 @@ class FrameAssortmentServiceTest {
         part.put("purchaseRevision", 4L);
         when(db.queryForList(startsWith("SELECT p.PartNo AS partNo"), eq(""), eq(""), eq(0), eq(0)))
                 .thenReturn(new ArrayList<>(List.of(part)));
+        when(db.queryForList(startsWith("SELECT part_no AS partNo"), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "partNo", 10L, "branchNo", 2L, "status", "ACTIVE", "revision", 1L,
+                        "note", "Перевірено", "actor", "courier", "updatedAt", "2026-10-16T09:00:00"
+                )));
 
         var result = service.matrix("", 0, false, auth);
         @SuppressWarnings("unchecked")
@@ -133,7 +138,7 @@ class FrameAssortmentServiceTest {
         assertFalse(rows.get(0).containsKey("stock"));
         assertFalse(rows.get(0).containsKey("purchaseStatus"));
         assertFalse(rows.get(0).containsKey("purchaseRevision"));
-        assertEquals(0L, rows.get(0).get("activeCount"));
+        assertEquals(1L, rows.get(0).get("activeCount"));
     }
 
     @Test
