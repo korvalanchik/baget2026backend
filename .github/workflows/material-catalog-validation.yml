@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/material-catalog-create
+      - feature/work-price-editor
   pull_request:
     branches:
       - master
