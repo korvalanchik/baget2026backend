@@ -43,7 +43,7 @@ class EstimateCompositionTest {
                 Map.of("marginWidthMm", n("10"), "marginHeightMm", n("10")), 187.5, 50);
         part(33370, CalculationMethod.FIXED, UnitType.PIECE, PartKind.WORK, Map.of(), 46.2, 0);
         part(5140, CalculationMethod.PERIMETER, UnitType.METER, PartKind.WORK, Map.of(), 20, .06);
-        part(27970, CalculationMethod.AREA, UnitType.SQUARE_METER, PartKind.MATERIAL, Map.of(), 602.5, 335);
+        part(27980, CalculationMethod.AREA, UnitType.SQUARE_METER, PartKind.MATERIAL, Map.of(), 602.5, 335);
         var prices = new PartPriceResolver();
         var validator = factory.getValidator();
         var materials = new MaterialPreviewService(repository, new MaterialConsumptionService(), prices, validator);
@@ -57,7 +57,7 @@ class EstimateCompositionTest {
 
     private EstimatePreviewRequest request() {
         var print = new MountingPreviewRequest(MountingPreviewRequest.MountingType.UNDERFRAME,
-                n("600"), n("800"), 1, MountingPreviewRequest.CanvasType.PRINT, 27970L, 29720L);
+                n("600"), n("800"), 1, MountingPreviewRequest.CanvasType.PRINT, 27980L, 29720L);
         var plane = new MountingPreviewRequest(MountingPreviewRequest.MountingType.PLANE,
                 n("600"), n("800"), 1, null, null, null);
         var frames = new ProductPreviewRequest(ProductPreviewRequest.ProductType.UNDERFRAME,

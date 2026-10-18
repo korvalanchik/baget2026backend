@@ -55,9 +55,9 @@ public class MountingPreviewService {
         }
         if (r.canvasPartNo() != null) {
             // Confirmed canvas binding. Do not accept every AREA part (e.g. mirror or glass) as canvas.
-            if (r.canvasPartNo() != 27970L)
+            if (r.canvasPartNo() != 27980L)
                 throw new PreviewException(HttpStatus.BAD_REQUEST, "UNSUPPORTED_CANVAS_PART",
-                        "Для полотна наразі налаштована позиція 27970");
+                        "Для полотна наразі переналаштована позиція 27980");
             // AREA remains the material default. A usage rule adds the margin without mutating Parts.
             var canvas = configured(r.canvasPartNo(), PartKind.MATERIAL, CalculationMethod.AREA,
                     UnitType.SQUARE_METER, Map.of());

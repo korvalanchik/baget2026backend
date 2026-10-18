@@ -60,7 +60,7 @@ class MountingPreviewTest {
         part(33370, CalculationMethod.FIXED, UnitType.PIECE, PartKind.WORK, Map.of(), 46.2, 0);
         part(5140, CalculationMethod.PERIMETER, UnitType.METER, PartKind.WORK, Map.of(), 20, .06);
         part(5150, CalculationMethod.PERIMETER, UnitType.METER, PartKind.WORK, Map.of(), 17.5, .06);
-        canvas = part(27970, CalculationMethod.AREA, UnitType.SQUARE_METER, PartKind.MATERIAL, Map.of(), 602.5, 335);
+        canvas = part(27980, CalculationMethod.AREA, UnitType.SQUARE_METER, PartKind.MATERIAL, Map.of(), 602.5, 335);
         var rail = part(28030, null, null, null, null, 110, 44);
         when(rail.getInQuality()).thenReturn(2.0);
         var prices = new PartPriceResolver();
@@ -75,8 +75,8 @@ class MountingPreviewTest {
     @AfterEach void close() { factory.close(); }
 
     @Test void printUses5140And100MmNotBlankTariff() {
-        var r = service.preview(underframe(CanvasType.PRINT, 27970L, 1), auth("ROLE_LEVEL2"));
-        assertEquals(List.of(29720L, 5140L, 27970L), r.lines().stream().map(l -> l.calculation().partNo()).toList());
+        var r = service.preview(underframe(CanvasType.PRINT, 27980L, 1), auth("ROLE_LEVEL2"));
+        assertEquals(List.of(29720L, 5140L, 27980L), r.lines().stream().map(l -> l.calculation().partNo()).toList());
         eq("0.63", r.lines().get(2).calculation().totalConsumption());
         eq("2.8", r.lines().get(1).calculation().totalConsumption());
         eq("666.58", r.total());
@@ -86,19 +86,19 @@ class MountingPreviewTest {
         verify(canvas, never()).setCalculationParams(any());
     }
     @Test void blankUses5150And80Mm() {
-        var r = service.preview(underframe(CanvasType.BLANK, 27970L, 1), auth("ROLE_LEVEL2"));
+        var r = service.preview(underframe(CanvasType.BLANK, 27980L, 1), auth("ROLE_LEVEL2"));
         assertEquals(5150L, r.lines().get(1).calculation().partNo());
         eq("0.5984", r.lines().get(2).calculation().totalConsumption());
         eq("640.54", r.total());
     }
     @Test void existingImageUses5140ButOnly80Mm() {
-        var r = service.preview(underframe(CanvasType.WITH_IMAGE, 27970L, 1), auth("ROLE_LEVEL2"));
+        var r = service.preview(underframe(CanvasType.WITH_IMAGE, 27980L, 1), auth("ROLE_LEVEL2"));
         assertEquals(5140L, r.lines().get(1).calculation().partNo());
         eq("0.5984", r.lines().get(2).calculation().totalConsumption());
         eq("647.54", r.total());
     }
     @Test void quantityMultipliesOnceAndTotalRoundsOnlyAtEnd() {
-        var r = service.preview(underframe(CanvasType.PRINT, 27970L, 2), auth("ROLE_LEVEL2"));
+        var r = service.preview(underframe(CanvasType.PRINT, 27980L, 2), auth("ROLE_LEVEL2"));
         eq("1.26", r.lines().get(2).calculation().totalConsumption());
         eq("1333.15", r.total());
         eq("0", r.roundingAdjustment());
@@ -108,10 +108,10 @@ class MountingPreviewTest {
         var r = service.preview(underframe(CanvasType.PRINT, null, 1), auth("ROLE_LEVEL2"));
         assertEquals(2, r.lines().size());
         eq("287", r.total());
-        verify(repository, never()).findById(27970L);
+        verify(repository, never()).findById(27980L);
     }
     @Test void noMountingMeansNoMarginEvenForPrint() {
-        var request = new MountingPreviewRequest(MountingType.NONE, n("600.1"), n("800.1"), 1, CanvasType.PRINT, 27970L, null);
+        var request = new MountingPreviewRequest(MountingType.NONE, n("600.1"), n("800.1"), 1, CanvasType.PRINT, 27980L, null);
         var r = service.preview(request, auth("ROLE_LEVEL2"));
         assertEquals(1, r.lines().size());
         eq("0.481401", r.lines().get(0).calculation().totalConsumption());
@@ -127,7 +127,7 @@ class MountingPreviewTest {
         verify(repository, never()).findById(5140L);
     }
     @Test void adminUsesCostForEveryLineIncludingWork() {
-        eq("300.82", service.preview(underframe(CanvasType.PRINT, 27970L, 1), auth("ROLE_ADMIN", "ROLE_LEVEL2")).total());
+        eq("300.82", service.preview(underframe(CanvasType.PRINT, 27980L, 1), auth("ROLE_ADMIN", "ROLE_LEVEL2")).total());
     }
     @Test void crossbarsAreIncludedOnce() {
         var r = service.preview(new MountingPreviewRequest(MountingType.UNDERFRAME, n("1200"), n("1500"),
@@ -151,7 +151,7 @@ class MountingPreviewTest {
     }
     @Test void canvasPriceCannotBeNullAndMirrorCannotBeCanvas() {
         when(canvas.getListPrice()).thenReturn(null);
-        assertThrows(PreviewException.class, () -> service.preview(underframe(CanvasType.PRINT, 27970L, 1), auth("ROLE_LEVEL2")));
+        assertThrows(PreviewException.class, () -> service.preview(underframe(CanvasType.PRINT, 27980L, 1), auth("ROLE_LEVEL2")));
         assertEquals("UNSUPPORTED_CANVAS_PART", assertThrows(PreviewException.class,
                 () -> service.preview(underframe(CanvasType.PRINT, 27760L, 1), auth("ROLE_LEVEL2"))).getCode());
     }
@@ -162,7 +162,7 @@ class MountingPreviewTest {
     }
     @Test void fractionsRoundUpBeforeMarginAndInvalidQuantityIsRejected() {
         var r = new MountingPreviewRequest(MountingType.UNDERFRAME, n("600.1"), n("800.1"),
-                1, CanvasType.PRINT, 27970L, 29720L);
+                1, CanvasType.PRINT, 27980L, 29720L);
         eq(".631601", service.preview(r, auth("ROLE_LEVEL2")).lines().get(2).calculation().consumptionPerProduct());
         assertEquals("INVALID_REQUEST", assertThrows(PreviewException.class,
                 () -> service.preview(underframe(CanvasType.PRINT, null, 0), auth("ROLE_LEVEL2"))).getCode());
@@ -171,7 +171,7 @@ class MountingPreviewTest {
         mvc.perform(post("/api/calculations/mounting-preview").principal(auth("ROLE_LEVEL2"))
                 .contentType("application/json").content("""
                 {"mountingType":"UNDERFRAME","widthMm":600,"heightMm":800,"productQuantity":1,
-                 "canvasType":"PRINT","canvasPartNo":27970,"underframePartNo":29720,"unitPrice":0,"total":0}
+                 "canvasType":"PRINT","canvasPartNo":27980,"underframePartNo":29720,"unitPrice":0,"total":0}
                 """))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(666.58));
         mvc.perform(post("/api/calculations/mounting-preview").principal(auth("ROLE_LEVEL2"))
@@ -189,7 +189,7 @@ class MountingPreviewTest {
         eq("2", r.lines().get(1).calculation().totalConsumption());
         eq("140.06", r.total());
         verify(repository, never()).findById(5140L);
-        verify(repository, never()).findById(27970L);
+        verify(repository, never()).findById(27980L);
     }
     @Test void embroideryUnderframeChargesBaseAnd5140PerimeterWork() {
         var r = service.preview(underframe(CanvasType.EMBROIDERY, null, 2), auth("ROLE_LEVEL2"));
@@ -198,8 +198,8 @@ class MountingPreviewTest {
         eq("112", r.lines().get(1).calculation().amount());
         verify(repository, never()).findById(5130L);
         verify(repository, never()).findById(33370L);
-        verify(repository, never()).findById(27970L);
+        verify(repository, never()).findById(27980L);
         assertThrows(PreviewException.class, () -> service.preview(
-                underframe(CanvasType.EMBROIDERY, 27970L, 1), auth("ROLE_LEVEL2")));
+                underframe(CanvasType.EMBROIDERY, 27980L, 1), auth("ROLE_LEVEL2")));
     }
 }

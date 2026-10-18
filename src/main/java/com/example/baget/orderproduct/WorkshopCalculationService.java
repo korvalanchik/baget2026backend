@@ -122,7 +122,7 @@ public class WorkshopCalculationService {
                 } else {
                     // A new article has no trustworthy usage context. User explicitly chooses geometry and multiplicity.
                     var part=parts.findById(extra.partNo()).orElseThrow(()->error("Матеріал не знайдено"));
-                    if(extra.partNo()==27970L || extra.partNo()==28030L)
+                    if(extra.partNo()==27980L || extra.partNo()==28030L)
                         throw error("Полотно/перемичку розраховуйте з початкової позиції виробу або введіть витрату вручну: потрібен контекст натяжки/підрамника");
                     var w=extra.basis()==Basis.OUTER?outerW:r.widthMm();var h=extra.basis()==Basis.OUTER?outerH:r.heightMm();
                     ConsumptionResult calculation;
