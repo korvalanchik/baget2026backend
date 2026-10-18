@@ -121,10 +121,9 @@ public class OrdersService {
     public Page<OrderSummaryView> getOrderSummaries(Pageable pageable) {
         UserAndRoles result = getUserAndRoles();
 
-        if (result.userRoles().contains("ROLE_ADMIN")) return ordersRepository.findAllSummaryBy(pageable);
-        if (result.userRoles().contains("ROLE_FOREMAN")) {
-            var branches = result.user().getAllowedBranches().stream().map(Branch::getName).toList();
-            return ordersRepository.findSummaryByBranch_NameIn(branches, pageable);
+        if (result.userRoles().contains("ROLE_ADMIN")
+                || result.userRoles().contains("ROLE_FOREMAN")) {
+            return ordersRepository.findAllSummaryBy(pageable);
         }
         throw new TransactionException("Обмежено права доступу");
     }
