@@ -2,15 +2,24 @@ package com.example.baget.warehouse;
 
 import com.example.baget.calculation.preview.PreviewException;
 import com.example.baget.orderproduct.InventoryReservations;
+import com.example.baget.parts.CalculationMethod;
+import com.example.baget.parts.UnitType;
 import com.example.baget.users.UsersRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.sql.Statement;
+import java.sql.Types;
 import java.util.*;
 
 @Service
@@ -33,6 +42,157 @@ public class WarehouseService {
     private void stockAccess(Authentication a) {
         if(Collections.disjoint(roles(a),Set.of("ROLE_ADMIN","ROLE_FOREMAN","ROLE_WAREHOUSE"))) throw denied();
     }
+    /**
+     * Creates a material-catalog item with validated calculation metadata.
+     * Physical stock starts at zero; real stock must enter through inventory count or receipt workflows.
+     */
+    public Map<String,Object> createMaterial(NewMaterial request, Authentication authentication) {
+        stockAccess(authentication);
+
+        String description = request.description() == null ? "" : request.description().trim();
+        if (description.isEmpty() || description.length() > 30) {
+            throw conflict("Артикул / назва має містити від 1 до 30 символів");
+        }
+        if (!db.queryForList(
+                "SELECT PartNo FROM parts WHERE LOWER(TRIM(Description))=LOWER(TRIM(?)) LIMIT 1",
+                Long.class, description).isEmpty()) {
+            throw new PreviewException(HttpStatus.CONFLICT, "MATERIAL_EXISTS",
+                    "Такий артикул уже існує. Знайдіть його в каталозі.");
+        }
+        if (request.vendorNo() != null && db.queryForList(
+                "SELECT VendorNo FROM vendors WHERE VendorNo=?", Long.class, request.vendorNo()).isEmpty()) {
+            throw conflict("Обраного постачальника не знайдено");
+        }
+
+        UnitType expectedUnit = unitFor(request.calculationMethod());
+        if (request.unit() != expectedUnit) {
+            throw conflict("Одиниця не відповідає методу розрахунку: " + request.calculationMethod());
+        }
+
+        Map<String,BigDecimal> params = new LinkedHashMap<>();
+        BigDecimal profileWidthMeters = null;
+        switch (request.calculationMethod()) {
+            case AREA -> {
+                rejectParams(request.marginWidthMm(), request.marginHeightMm(), request.allowanceMm(),
+                        request.railWidthMm(), request.profileWidthMm());
+            }
+            case AREA_WITH_MARGIN -> {
+                rejectUnused(request.allowanceMm(), request.railWidthMm(), request.profileWidthMm());
+                params.put("marginWidthMm", requiredNonNegative(request.marginWidthMm(), "Припуск по ширині"));
+                params.put("marginHeightMm", requiredNonNegative(request.marginHeightMm(), "Припуск по висоті"));
+            }
+            case PERIMETER -> {
+                rejectUnused(request.marginWidthMm(), request.marginHeightMm(), request.allowanceMm(),
+                        request.profileWidthMm());
+                if (request.railWidthMm() != null) params.put("railWidthMm", request.railWidthMm());
+            }
+            case FRAME_PROFILE -> {
+                rejectUnused(request.marginWidthMm(), request.marginHeightMm(), request.allowanceMm(),
+                        request.railWidthMm());
+                BigDecimal width = request.profileWidthMm();
+                if (width == null || width.compareTo(new BigDecimal("0.300")) <= 0) {
+                    throw conflict("Для профілю вкажіть ширину понад 0,3 мм");
+                }
+                profileWidthMeters = width.divide(new BigDecimal("1000"), 9, RoundingMode.HALF_UP);
+            }
+            case WIDTH_PLUS_ALLOWANCE -> {
+                rejectUnused(request.marginWidthMm(), request.marginHeightMm(), request.railWidthMm(),
+                        request.profileWidthMm());
+                params.put("allowanceMm", requiredNonNegative(request.allowanceMm(), "Припуск"));
+            }
+            case QUANTITY -> {
+                rejectParams(request.marginWidthMm(), request.marginHeightMm(), request.allowanceMm(),
+                        request.railWidthMm(), request.profileWidthMm());
+            }
+            case FIXED -> throw conflict(
+                    "Метод FIXED призначений для робіт. Для матеріалу оберіть «Кількість на виріб».");
+        }
+
+        validatePrice(request.cost(), "Cost");
+        validatePrice(request.listPrice(), "ListPrice");
+        validatePrice(request.listPrice1(), "ListPrice_1");
+        validatePrice(request.listPrice3(), "ListPrice_3");
+
+        final Double storedProfileWidth = profileWidthMeters == null ? null : profileWidthMeters.doubleValue();
+        final int legacyUnitQuality = switch (request.unit()) {
+            case SQUARE_METER -> 1;
+            case METER -> 2;
+            case PIECE -> 3;
+        };
+        final String calculationParams = json.valueToTree(params).toString();
+        String sql = """
+            INSERT INTO parts (
+                VendorNo, Description, ProfilWidth, InQuality, OnHand, OnOrder,
+                Cost, ListPrice, ListPrice_1, ListPrice_2, NoPercent, ListPrice_3, Version,
+                unit_type, calculation_method, part_kind, calculation_params
+            ) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, NULL, 0, ?, 0, ?, ?, 'MATERIAL', CAST(? AS JSON))
+            """;
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        PreparedStatementCreator statement = connection -> {
+            var ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            int index = 1;
+            if (request.vendorNo() == null) ps.setNull(index++, Types.BIGINT);
+            else ps.setLong(index++, request.vendorNo());
+            ps.setString(index++, description);
+            if (storedProfileWidth == null) ps.setNull(index++, Types.DOUBLE);
+            else ps.setDouble(index++, storedProfileWidth);
+            ps.setInt(index++, legacyUnitQuality);
+            ps.setDouble(index++, request.cost().doubleValue());
+            ps.setDouble(index++, request.listPrice().doubleValue());
+            ps.setDouble(index++, request.listPrice1().doubleValue());
+            ps.setDouble(index++, request.listPrice3().doubleValue());
+            ps.setString(index++, request.unit().name());
+            ps.setString(index++, request.calculationMethod().name());
+            ps.setString(index, calculationParams);
+            return ps;
+        };
+        db.update(statement, keyHolder);
+        Number key = keyHolder.getKey();
+        if (key == null) throw new IllegalStateException("Database did not return the new material ID");
+
+        long partNo = key.longValue();
+        return Map.of(
+                "partNo", partNo,
+                "description", description,
+                "unit", request.unit().name(),
+                "calculationMethod", request.calculationMethod().name(),
+                "onHand", BigDecimal.ZERO
+        );
+    }
+
+    private UnitType unitFor(CalculationMethod method) {
+        if (method == null) throw conflict("Оберіть метод розрахунку");
+        return switch (method) {
+            case AREA, AREA_WITH_MARGIN -> UnitType.SQUARE_METER;
+            case PERIMETER, FRAME_PROFILE, WIDTH_PLUS_ALLOWANCE -> UnitType.METER;
+            case QUANTITY -> UnitType.PIECE;
+            case FIXED -> throw conflict("Метод FIXED не використовується для матеріалів");
+        };
+    }
+
+    private BigDecimal requiredNonNegative(BigDecimal value, String label) {
+        if (value == null || value.signum() < 0) throw conflict("Вкажіть коректне значення: " + label);
+        return value;
+    }
+
+    private void validatePrice(BigDecimal value, String label) {
+        if (value == null || value.signum() < 0 || value.compareTo(new BigDecimal("999999999")) > 0) {
+            throw conflict("Вкажіть коректну ціну " + label + " від 0 до 999999999");
+        }
+    }
+
+    private void rejectUnused(BigDecimal... values) {
+        if (Arrays.stream(values).anyMatch(Objects::nonNull)) {
+            throw conflict("Приберіть параметри, які не використовуються обраним методом розрахунку");
+        }
+    }
+
+    private void rejectParams(BigDecimal marginWidth, BigDecimal marginHeight, BigDecimal allowance,
+                              BigDecimal railWidth, BigDecimal profileWidth) {
+        rejectUnused(marginWidth, marginHeight, allowance, railWidth, profileWidth);
+    }
+
     private void productAccess(Map<String,Object> p,Authentication a) {
         var roles=roles(a);
         if(Collections.disjoint(roles,Set.of("ROLE_ADMIN","ROLE_FOREMAN","ROLE_WAREHOUSE","ROLE_MANAGER","ROLE_SELLER","ROLE_COUNTER","ROLE_LEVEL2","ROLE_USER"))) throw denied();
@@ -71,6 +231,21 @@ public class WarehouseService {
         params.add(Math.max(0,Math.min(page,100000))*100);
         return db.queryForList("SELECT p.tracking_id AS trackingId,p.order_no AS orderNo,p.client_product_id AS productName,p.current_location AS location,p.pending_location AS pending,b.BranchName AS branchName FROM order_products p JOIN orders o ON o.OrderNo=p.order_no JOIN branches b ON b.BranchNo=o.BranchNo WHERE p.active=1 AND p.production_confirmed=1 AND p.current_location<>'CUSTOMER'"+scope+" ORDER BY p.id LIMIT 100 OFFSET ?",params.toArray());
     }
+    public record NewMaterial(
+        @NotBlank @Size(max=30) String description,
+        Long vendorNo,
+        @NotNull UnitType unit,
+        @NotNull CalculationMethod calculationMethod,
+        @DecimalMin("0.301") @DecimalMax("500") @Digits(integer=3,fraction=3) BigDecimal profileWidthMm,
+        @DecimalMin("0") @DecimalMax("1000") @Digits(integer=4,fraction=3) BigDecimal marginWidthMm,
+        @DecimalMin("0") @DecimalMax("1000") @Digits(integer=4,fraction=3) BigDecimal marginHeightMm,
+        @DecimalMin("0") @DecimalMax("1000") @Digits(integer=4,fraction=3) BigDecimal allowanceMm,
+        @DecimalMin("0.001") @DecimalMax("1000") @Digits(integer=4,fraction=3) BigDecimal railWidthMm,
+        @NotNull @DecimalMin("0") @DecimalMax("999999999") @Digits(integer=9,fraction=6) BigDecimal cost,
+        @NotNull @DecimalMin("0") @DecimalMax("999999999") @Digits(integer=9,fraction=6) BigDecimal listPrice,
+        @NotNull @DecimalMin("0") @DecimalMax("999999999") @Digits(integer=9,fraction=6) BigDecimal listPrice1,
+        @NotNull @DecimalMin("0") @DecimalMax("999999999") @Digits(integer=9,fraction=6) BigDecimal listPrice3
+    ) {}
     public record Transfer(@PositiveOrZero long expectedRevision,@NotBlank String destination,@Size(max=1000) String note) {}
     public Map<String,Object> transfer(String token,Transfer r,boolean accept,Authentication a) {
         var initial=product(token,false);productAccess(initial,a);
