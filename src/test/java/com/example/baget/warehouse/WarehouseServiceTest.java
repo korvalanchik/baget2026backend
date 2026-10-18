@@ -1,11 +1,15 @@
 package com.example.baget.warehouse;
 import com.example.baget.calculation.preview.PreviewException;
 import com.example.baget.orderproduct.InventoryReservations;
+import com.example.baget.parts.CalculationMethod;
+import com.example.baget.parts.UnitType;
 import com.example.baget.users.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import java.math.BigDecimal;
@@ -64,6 +68,75 @@ class WarehouseServiceTest {
         assertThrows(PreviewException.class,()->service.stock(1,r,auth));verifyNoInteractions(reservations);
     }
     @Test void databaseRolesControlStockAccess(){when(users.findByUsername("admin")).thenReturn(Optional.empty());assertThrows(PreviewException.class,()->service.stock(1,request("COUNT","9","10"),auth));verifyNoInteractions(reservations);}
+    WarehouseService.NewMaterial newMaterial(String description, UnitType unit, CalculationMethod method,
+            java.math.BigDecimal profileWidthMm, java.math.BigDecimal marginWidthMm,
+            java.math.BigDecimal marginHeightMm, java.math.BigDecimal allowanceMm,
+            java.math.BigDecimal railWidthMm) {
+        return new WarehouseService.NewMaterial(description, null, unit, method, profileWidthMm,
+                marginWidthMm, marginHeightMm, allowanceMm, railWidthMm,
+                n("2.5"), n("4.5"), n("4.0"), n("5.0"));
+    }
+
+    @Test void createMaterialWritesTypedCatalogRowAndReturnsGeneratedPartNo() {
+        when(db.queryForList("SELECT PartNo FROM parts WHERE LOWER(TRIM(Description))=LOWER(TRIM(?)) LIMIT 1",
+                Long.class, "PROFILE-NEW")).thenReturn(List.of());
+        when(db.update(any(PreparedStatementCreator.class), any(KeyHolder.class))).thenAnswer(invocation -> {
+            KeyHolder holder = invocation.getArgument(1);
+            holder.getKeyList().add(Map.of("GENERATED_KEY", 9001L));
+            return 1;
+        });
+
+        var result = service.createMaterial(newMaterial("PROFILE-NEW", UnitType.METER,
+                CalculationMethod.FRAME_PROFILE, n("24"), null, null, null, null), auth);
+
+        assertEquals(9001L, result.get("partNo"));
+        assertEquals("PROFILE-NEW", result.get("description"));
+        assertEquals("METER", result.get("unit"));
+        assertEquals("FRAME_PROFILE", result.get("calculationMethod"));
+        assertEquals(n("0"), result.get("onHand"));
+        verify(db).update(any(PreparedStatementCreator.class), any(KeyHolder.class));
+    }
+
+    @Test void createMaterialRejectsDuplicateArticleBeforeInsert() {
+        when(db.queryForList("SELECT PartNo FROM parts WHERE LOWER(TRIM(Description))=LOWER(TRIM(?)) LIMIT 1",
+                Long.class, "DUPLICATE")).thenReturn(List.of(27540L));
+
+        assertThrows(PreviewException.class, () -> service.createMaterial(newMaterial("DUPLICATE",
+                UnitType.PIECE, CalculationMethod.QUANTITY, null, null, null, null, null), auth));
+        verify(db, never()).update(any(PreparedStatementCreator.class), any(KeyHolder.class));
+    }
+
+    @Test void createMaterialRequiresUnitCompatibleWithCalculationMethod() {
+        when(db.queryForList("SELECT PartNo FROM parts WHERE LOWER(TRIM(Description))=LOWER(TRIM(?)) LIMIT 1",
+                Long.class, "BAD-UNIT")).thenReturn(List.of());
+
+        assertThrows(PreviewException.class, () -> service.createMaterial(newMaterial("BAD-UNIT",
+                UnitType.PIECE, CalculationMethod.AREA, null, null, null, null, null), auth));
+        verify(db, never()).update(any(PreparedStatementCreator.class), any(KeyHolder.class));
+    }
+
+    @Test void createMaterialRequiresParametersForAreaWithMargins() {
+        when(db.queryForList("SELECT PartNo FROM parts WHERE LOWER(TRIM(Description))=LOWER(TRIM(?)) LIMIT 1",
+                Long.class, "NO-MARGIN")).thenReturn(List.of());
+
+        assertThrows(PreviewException.class, () -> service.createMaterial(newMaterial("NO-MARGIN",
+                UnitType.SQUARE_METER, CalculationMethod.AREA_WITH_MARGIN, null, null, null, null, null), auth));
+        verify(db, never()).update(any(PreparedStatementCreator.class), any(KeyHolder.class));
+    }
+
+    @Test void createMaterialRequiresWarehouseRole() {
+        var user = new User();
+        var role = new Role();
+        role.setName("ROLE_MANAGER");
+        user.setRoles(List.of(role));
+        user.setAllowedBranches(Set.of());
+        when(users.findByUsername("admin")).thenReturn(Optional.of(user));
+
+        assertThrows(PreviewException.class, () -> service.createMaterial(newMaterial("NO-ACCESS",
+                UnitType.PIECE, CalculationMethod.QUANTITY, null, null, null, null, null), auth));
+        verifyNoInteractions(db);
+    }
+
     void trackingRow(long revision,String state,String location,String pending) {
         var p=new HashMap<String,Object>();p.put("id",10L);p.put("orderNo",1L);p.put("revision",revision);
         p.put("state",state);p.put("location",location);p.put("pending",pending);p.put("transferActor","admin");p.put("branchName","Test");
