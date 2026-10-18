@@ -27,6 +27,7 @@ public class WarehouseController {
     @PostMapping("/products/{token}/accept") public Object accept(@PathVariable("token") String token,@Valid @RequestBody WarehouseService.Transfer r,Authentication a){return service.transfer(token,r,true,a);}
     @PostMapping("/products/{token}/cancel") public Object cancel(@PathVariable("token") String token,@Valid @RequestBody WarehouseService.Transfer r,Authentication a){return service.cancelTransfer(token,r,a);}
     @GetMapping("/materials") public Object materials(@RequestParam(defaultValue="",name="q") String q,@RequestParam(defaultValue="0",name="page") int page,@RequestParam(defaultValue="false",name="shortageOnly") boolean shortage,Authentication a){return service.materials(q,page,shortage,a);}
+    @PostMapping("/materials") public Object createMaterial(@Valid @RequestBody WarehouseService.NewMaterial r,Authentication a){return service.createMaterial(r,a);}
     @GetMapping("/materials/{id}") public Object material(@PathVariable("id") long id,Authentication a){return service.material(id,a);}
     @PostMapping("/materials/{id}/stock") public Object stock(@PathVariable("id") long id,@Valid @RequestBody WarehouseService.Stock r,Authentication a){return service.stock(id,r,a);}
     @PostMapping("/materials/{id}/requests") public Object request(@PathVariable("id") long id,@Valid @RequestBody WarehouseService.Purchase r,Authentication a){return service.request(id,r,a);}
