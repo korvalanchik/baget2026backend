@@ -43,6 +43,16 @@ class CashServiceTest {
  @Test void exactRetryPostsNothing()throws Exception {var r=send();when(db.queryForList(startsWith("SELECT actor,operation,payload,result"),eq(key()))).thenReturn(List.of(Map.of("actor","operator","operation","SEND","payload",new ObjectMapper().writeValueAsString(r),"result","{\"id\":40,\"state\":\"SENT\"}")));service.send(r,auth);noLedger();verify(db,never()).update(startsWith("INSERT INTO cash_transfers"),any(Object[].class));}
  @Test void initializedAndOwnBranchRequiredForPayment(){from.put("initialized",false);assertThrows(PreviewException.class,()->service.paymentAccount(user,1,1L));from.put("initialized",true);when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(1L))).thenReturn(0L);assertThrows(PreviewException.class,()->service.paymentAccount(user,1,1L));}
  @Test void paymentCannotSelectForeignBranchOrTransit(){role("ROLE_MANAGER");from.put("branch_no",9L);assertThrows(PreviewException.class,()->service.paymentAccount(user,1,1L));assertThrows(PreviewException.class,()->service.paymentAccount(user,1,3L));assertThrows(PreviewException.class,()->service.paymentAccount(user,1,2L));}
+ @SuppressWarnings("unchecked")
+ @Test void overviewCanBeScopedToActiveBranch(){
+  role("ROLE_MANAGER");var other=new Branch();other.setBranchNo(1L);var studio=new Branch();studio.setBranchNo(8L);user.setAllowedBranches(Set.of(other,studio));
+  List<Map<String,Object>> accountRows=List.of(Map.of("id",11L,"kind","BRANCH_CASH","branch_no",1L),Map.of("id",88L,"kind","BRANCH_CASH","branch_no",8L));
+  when(db.queryForList(startsWith("SELECT a.*,b.BranchName AS branchName"))).thenReturn(accountRows);
+  when(db.queryForList(startsWith("SELECT t.*,"))).thenReturn(List.of());
+  when(db.queryForList(eq("SELECT id,name,kind FROM cash_accounts WHERE kind='CENTRAL_CASH' AND initialized=1"))).thenReturn(List.of());
+  Map<String,Object> result=(Map<String,Object>)service.overview(auth,8L);List<Map<String,Object>> visible=(List<Map<String,Object>>)result.get("accounts");
+  assertEquals(1,visible.size());assertEquals(88L,visible.get(0).get("id"));
+ }
  @Test void rewardUsesCentralCashOnly(){service.reward(55,null,d("100"),user);leg(2,"OUT","MANAGER_REWARD",null,55L);}
  @Test void managerCannotPostReward(){role("ROLE_MANAGER");assertThrows(PreviewException.class,()->service.reward(55,null,d("100"),user));noLedger();}
  @Test void historicalRewardReversalDoesNotInventCash(){service.reward(55,54L,d("100"),user);noLedger();}
