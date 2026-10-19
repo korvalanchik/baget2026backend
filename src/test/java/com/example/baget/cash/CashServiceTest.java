@@ -49,7 +49,7 @@ class CashServiceTest {
   List<Map<String,Object>> accountRows=List.of(Map.of("id",11L,"kind","BRANCH_CASH","branch_no",1L),Map.of("id",88L,"kind","BRANCH_CASH","branch_no",8L));
   when(db.queryForList(startsWith("SELECT a.*,b.BranchName AS branchName"),any(Object[].class))).thenReturn(accountRows);
   when(db.queryForList(startsWith("SELECT t.*,"),any(Object[].class))).thenReturn(List.of());
-  when(db.queryForList("SELECT id,name,kind FROM cash_accounts WHERE kind='CENTRAL_CASH' AND initialized=1",any(Object[].class))).thenReturn(List.of());
+  when(db.queryForList(eq("SELECT id,name,kind FROM cash_accounts WHERE kind='CENTRAL_CASH' AND initialized=1"),any(Object[].class))).thenReturn(List.of());
   Map<String,Object> result=(Map<String,Object>)service.overview(auth,8L);List<Map<String,Object>> visible=(List<Map<String,Object>>)result.get("accounts");
   assertEquals(1,visible.size());assertEquals(88L,visible.get(0).get("id"));
  }
