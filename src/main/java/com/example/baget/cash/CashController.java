@@ -9,7 +9,7 @@ import java.util.Map;
 @RequestMapping("/api/cash")
 public class CashController {
  private final CashService service;public CashController(CashService service){this.service=service;}
- @GetMapping public Object overview(Authentication a){return service.overview(a);}
+ @GetMapping public Object overview(@RequestParam(name="branch",required=false) Long branch,Authentication a){return service.overview(a,branch);}
  @GetMapping("/options") public Object options(Authentication a){return service.options(a);}
  @GetMapping("/payment-options") public Object paymentOptions(@RequestParam(name="branch",required=false) Long branch,@RequestParam(name="invoice",required=false) Long invoice,Authentication a){if(branch!=null)return service.paymentOptions(branch,a);if(invoice!=null)return service.invoicePaymentOptions(invoice,a);throw CashService.bad("Оберіть філію або рахунок");}
  @GetMapping("/accounts/{id}/journal") public Object journal(@PathVariable("id") long id,@RequestParam(name="page",defaultValue="0") int page,Authentication a){return service.journal(id,page,a);}
