@@ -18,6 +18,16 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     Page<Customer> findAll(@NonNull Pageable pageable);
     List<CustomerSelectView> findAllBy();
     List<Customer> findByMobileContaining(String prefix);
+
+    @Query("""
+        select c from Customer c
+        where lower(coalesce(c.mobile, '')) like lower(concat(concat('%', :query), '%'))
+           or lower(coalesce(c.phone, '')) like lower(concat(concat('%', :query), '%'))
+           or lower(coalesce(c.company, '')) like lower(concat(concat('%', :query), '%'))
+           or lower(coalesce(c.contact, '')) like lower(concat(concat('%', :query), '%'))
+        order by c.company asc, c.custNo asc
+        """)
+    Page<Customer> searchByAnyField(@Param("query") String query, Pageable pageable);
     Optional<Customer> findFirstByMobileContainingOrderByCustNoAsc(String phone);
     Optional<Customer> findTopByCompanyStartingWithOrderByCustNoDesc(String prefix);
 

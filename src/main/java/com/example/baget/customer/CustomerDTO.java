@@ -60,4 +60,11 @@ public class CustomerDTO {
         this.mobile = mobile;
         this.comment = comment;
     }
+
+    public CustomerDTO(Long custNo, String company, String addr1, String mobile, String comment,
+                       String contact, String phone) {
+        this(custNo, company, addr1, mobile, comment);
+        this.contact = contact;
+        this.phone = phone;
+    }
 }
