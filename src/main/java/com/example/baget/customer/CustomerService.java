@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
@@ -77,13 +78,25 @@ public class CustomerService {
     }
 
 
-    @Cacheable(value = "CustomerPhonePrefix", key = "#prefix")
+    @Transactional(readOnly = true)
     public List<CustomerDTO> findByPhonePrefix(String prefix) {
-        return customerRepository.findByMobileContaining(prefix)
-                .stream()
-                .map(customer -> new CustomerDTO(customer.getCustNo(), customer.getCompany(), customer.getAddr1(), customer.getMobile(), customer.getComment()))
-                .collect(Collectors.toList());
+        String query = prefix == null ? "" : prefix.trim();
+        if (query.length() < 2) {
+            return List.of();
+        }
 
+        return customerRepository.searchByAnyField(query, PageRequest.of(0, 20))
+                .getContent()
+                .stream()
+                .map(customer -> new CustomerDTO(
+                        customer.getCustNo(),
+                        customer.getCompany(),
+                        customer.getAddr1(),
+                        customer.getMobile(),
+                        customer.getComment(),
+                        customer.getContact(),
+                        customer.getPhone()))
+                .toList();
     }
 
     public List<CustomerBalanceProjection> getClientsForManager(String username, Long branchNo, boolean debtOnly, LocalDate date) {
