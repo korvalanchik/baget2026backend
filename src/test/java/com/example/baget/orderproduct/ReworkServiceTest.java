@@ -40,7 +40,7 @@ class ReworkServiceTest {
         when(db.queryForObject("SELECT COUNT(*) FROM product_invoice_claims WHERE product_id=?",Long.class,10L)).thenReturn(0L);
         when(db.queryForObject("SELECT COUNT(*) FROM invoice_orders io WHERE io.order_no=? AND NOT EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=io.invoice_id)",Long.class,1L)).thenReturn(0L);
         when(db.queryForObject("SELECT COUNT(*) FROM order_products WHERE order_no=? AND active=1 AND production_confirmed=0",Long.class,1L)).thenReturn(0L);
-        when(orders.read(1,auth)).thenReturn(new CalculatedOrderService.View(1,7,3,"Філія",5,"Клієнт","","","",null,n("100"),List.of()));
+        when(orders.read(1,auth)).thenReturn(new CalculatedOrderService.View(1,7,3,"Філія",5,"Клієнт","","","",null,"NOT_REQUIRED",null,null,n("100"),List.of()));
         product.putAll(Map.of("id",10L,"production_revision",3L,"production_confirmed",true,"production_state","COMPLETED","current_location","WORKSHOP","confirmed_revision",3L,"actual_total",n("100"),"configuration","{}"));
         product.put("confirmed_calculation","{\"productId\":10,\"revision\":3,\"total\":100,\"lines\":[]}");
         product.put("measured_width_mm",n("300"));product.put("measured_height_mm",n("400"));
