@@ -16,6 +16,7 @@ public record CalculatedOrderRequest(
     @Size(max=30) String address,
     @Size(max=100) String notice,
     LocalDate dueDate,
+    boolean deadlineApprovedWithWorkshop,
     @NotNull @PositiveOrZero Long expectedRevision,
     @NotNull @Size(min=1,max=50) List<@NotNull @Valid Product> products
 ) {
