@@ -21,10 +21,10 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     @Query("""
         select c from Customer c
-        where lower(coalesce(c.mobile, '')) like lower(concat('%', :query, '%'))
-           or lower(coalesce(c.phone, '')) like lower(concat('%', :query, '%'))
-           or lower(coalesce(c.company, '')) like lower(concat('%', :query, '%'))
-           or lower(coalesce(c.contact, '')) like lower(concat('%', :query, '%'))
+        where lower(coalesce(c.mobile, '')) like lower(concat(concat('%', :query), '%'))
+           or lower(coalesce(c.phone, '')) like lower(concat(concat('%', :query), '%'))
+           or lower(coalesce(c.company, '')) like lower(concat(concat('%', :query), '%'))
+           or lower(coalesce(c.contact, '')) like lower(concat(concat('%', :query), '%'))
         order by c.company asc, c.custNo asc
         """)
     Page<Customer> searchByAnyField(@Param("query") String query, Pageable pageable);
