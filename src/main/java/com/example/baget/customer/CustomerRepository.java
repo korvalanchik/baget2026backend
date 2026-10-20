@@ -27,7 +27,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
            or lower(coalesce(c.contact, '')) like lower(concat(concat('%', :query), '%'))
         order by c.company asc, c.custNo asc
         """)
-    Page<Customer> searchByAnyField(@Param("query") String query, Pageable pageable);
+    List<Customer> searchByAnyField(@Param("query") String query, Pageable pageable);
     Optional<Customer> findFirstByMobileContainingOrderByCustNoAsc(String phone);
     Optional<Customer> findTopByCompanyStartingWithOrderByCustNoDesc(String prefix);
 
