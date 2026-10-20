@@ -33,7 +33,7 @@ class CalculatedOrderAccessTest {
         var p=new ProductPreviewRequest(ProductPreviewRequest.ProductType.FRAMED_ARTWORK,new BigDecimal("400"),new BigDecimal("500"),1,30410L,null);
         var component=new EstimatePreviewRequest.Item("art-1",EstimatePreviewRequest.Kind.PRODUCT,p,null);
         var draft=new CalculatedOrderRequest.Product("art-1",new ObjectMapper().createObjectNode(),"",List.of(component));
-        return new CalculatedOrderRequest("12345678-1234-4234-8234-123456789012","Парапет",9878L,"Test","0660000000","","",null,0L,List.of(draft));
+        return new CalculatedOrderRequest("12345678-1234-4234-8234-123456789012","Парапет",9878L,"Test","0660000000","","",null,false,0L,List.of(draft));
     }
     @Test void anonymousCannotReserveOrWrite(){
         assertEquals("AUTH_REQUIRED",assertThrows(PreviewException.class,()->service.create(request(),null)).getCode());
