@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +43,9 @@ public class CalculatedOrderService {
     public record ProductView(long id, String clientProductId, JsonNode configuration, JsonNode calculation,
                               BigDecimal total, List<InventoryReservations.Balance> materials) {}
     public record View(long orderNo,long revision,int statusOrder,String branchName,long custNo,String company,
-                       String phone,String address,String notice,LocalDate dueDate,BigDecimal total,List<ProductView> products) {}
+                       String phone,String address,String notice,LocalDate dueDate,
+                       String deadlineApprovalStatus,String deadlineApprovedBy,Instant deadlineApprovedAt,
+                       BigDecimal total,List<ProductView> products) {}
     private User access(Authentication auth,String branch) {
         if(auth==null || !auth.isAuthenticated()) throw error(HttpStatus.UNAUTHORIZED,"AUTH_REQUIRED","Увійдіть до системи");
         var user=users.findByUsername(auth.getName()).orElseThrow(()->error(HttpStatus.FORBIDDEN,"ACCESS_DENIED","Користувача не знайдено"));
@@ -100,6 +103,7 @@ public class CalculatedOrderService {
         db.update("INSERT INTO orders(OrderNo,CustNo,BranchNo,EmpNo,SaleDate,ShipDate,ItemsTotal,AmountDueN,AmountPaid,Income,StatusOrder,Notice,PublicId,calculation_revision,calculation_request_key,calculation_request_hash) VALUES(?,?,?,?,CURRENT_TIMESTAMP,?,?,?,0,0,1,?,?,1,?,?)",
                 orderNo,customer,branch,user.getId(),date(r.dueDate()),total,total,r.notice(),UUID.randomUUID().toString(),r.requestKey(),hash);
         db.update("UPDATE orders SET commerce_mode=?,commerce_partner_id=? WHERE OrderNo=?",settings.get("mode"),settings.get("partnerId"),orderNo);
+        applyDeadlineApproval(orderNo, r.dueDate(), r.deadlineApprovedWithWorkshop(), user);
         persist(orderNo,1,priced,auth.getName());
         for(long id:ids) reservations.refillPart(id,auth.getName());
         if(orderEvents!=null) orderEvents.publishEvent(new com.example.baget.telegram.OrderCopyCreated(orderNo));
@@ -119,6 +123,10 @@ public class CalculatedOrderService {
         validate(r);var old=lock(orderNo,auth);editable(orderNo,old,r.expectedRevision());
         if(!old.branchName().equals(r.branchName()) || !Objects.equals(r.custNo(),old.custNo()))
             throw bad("Під час редагування конфігурації клієнт і філія залишаються незмінними");
+        var actor=access(auth,r.branchName());
+        boolean preserveExistingApproval = DeadlineApproval.isRequired(r.dueDate(), LocalDate.now(DeadlineApproval.BUSINESS_ZONE))
+                && Objects.equals(r.dueDate(),old.dueDate())
+                && "APPROVED".equals(old.deadlineApprovalStatus());
         var mode=db.queryForObject("SELECT commerce_mode FROM orders WHERE OrderNo=?",String.class,orderNo);
         var priced=price(r,auth,mode);
         var ids=materialIds(priced);ids.addAll(reservations.orderParts(orderNo));reservations.lockParts(ids);
@@ -130,6 +138,9 @@ public class CalculatedOrderService {
         var total=priced.stream().map(p->p.result().total()).reduce(BigDecimal.ZERO,BigDecimal::add);
         db.update("UPDATE orders SET ItemsTotal=?,AmountDueN=GREATEST(0,?-COALESCE(AmountPaid,0)),Notice=?,ShipDate=?,calculation_revision=? WHERE OrderNo=?",
                 total,total,r.notice(),date(r.dueDate()),revision,orderNo);
+        if (!preserveExistingApproval) {
+            applyDeadlineApproval(orderNo, r.dueDate(), r.deadlineApprovedWithWorkshop(), actor);
+        }
         for(long id:ids) reservations.refillPart(id,auth.getName());
         return read(orderNo,auth);
     }
@@ -148,6 +159,16 @@ public class CalculatedOrderService {
         for(long id:ids) reservations.refillPart(id,auth.getName());
         return read(orderNo,auth);
     }
+    private void applyDeadlineApproval(long orderNo, LocalDate dueDate, boolean agreed, User actor) {
+        boolean required = DeadlineApproval.isRequired(dueDate, LocalDate.now(DeadlineApproval.BUSINESS_ZONE));
+        boolean approved = required && agreed;
+        String status = !required ? "NOT_REQUIRED" : approved ? "APPROVED" : "PENDING";
+        Long approvedBy = approved ? actor.getId() : null;
+        db.update("UPDATE orders SET deadline_approval_status=?, deadline_approved_by_user_id=?, "
+                        + "deadline_approved_at=CASE WHEN ? THEN CURRENT_TIMESTAMP(6) ELSE NULL END WHERE OrderNo=?",
+                status, approvedBy, approved, orderNo);
+    }
+
     private View lock(long orderNo,Authentication auth) {
         if(db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,orderNo).isEmpty()) throw error(HttpStatus.NOT_FOUND,"ORDER_NOT_FOUND","Замовлення не знайдено");
         return read(orderNo,auth);
@@ -161,14 +182,19 @@ public class CalculatedOrderService {
     }
     public View read(long orderNo,Authentication auth) {
         db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR SHARE",Long.class,orderNo);
-        var headers=db.query("SELECT o.calculation_revision,o.StatusOrder,b.BranchName,o.CustNo,c.Company,c.Mobile,c.Addr1,o.Notice,o.ShipDate,o.ItemsTotal FROM orders o JOIN branches b ON b.BranchNo=o.BranchNo JOIN customer c ON c.CustNo=o.CustNo WHERE o.OrderNo=?",
-                (rs,n)->new View(orderNo,rs.getLong(1),rs.getInt(2),rs.getString(3),rs.getLong(4),rs.getString(5),rs.getString(6),rs.getString(7),rs.getString(8),rs.getDate(9)==null?null:rs.getDate(9).toLocalDate(),rs.getBigDecimal(10),List.of()),orderNo);
+        var headers=db.query("SELECT o.calculation_revision,o.StatusOrder,b.BranchName,o.CustNo,c.Company,c.Mobile,c.Addr1,o.Notice,o.ShipDate,o.deadline_approval_status,ua.username,o.deadline_approved_at,o.ItemsTotal "
+                        + "FROM orders o JOIN branches b ON b.BranchNo=o.BranchNo JOIN customer c ON c.CustNo=o.CustNo "
+                        + "LEFT JOIN users ua ON ua.id=o.deadline_approved_by_user_id WHERE o.OrderNo=?",
+                (rs,n)->new View(orderNo,rs.getLong(1),rs.getInt(2),rs.getString(3),rs.getLong(4),rs.getString(5),rs.getString(6),rs.getString(7),rs.getString(8),
+                        rs.getDate(9)==null?null:rs.getDate(9).toLocalDate(),rs.getString(10),rs.getString(11),
+                        rs.getTimestamp(12)==null?null:rs.getTimestamp(12).toInstant(),rs.getBigDecimal(13),List.of()),orderNo);
         if(headers.isEmpty()) throw error(HttpStatus.NOT_FOUND,"ORDER_NOT_FOUND","Замовлення не знайдено");
         var h=headers.get(0);access(auth,h.branchName());
         if(h.revision()==0) throw bad("Це замовлення створено у старій формі");
         var products=db.query("SELECT id,client_product_id,configuration,calculation,total FROM order_products WHERE order_no=? AND active=1 ORDER BY id",
                 (rs,n)->new ProductView(rs.getLong(1),rs.getString(2),decode(rs.getString(3)),decode(rs.getString(4)),rs.getBigDecimal(5),reservations.balances(rs.getLong(1))),orderNo);
-        return new View(h.orderNo(),h.revision(),h.statusOrder(),h.branchName(),h.custNo(),h.company(),h.phone(),h.address(),h.notice(),h.dueDate(),h.total(),products);
+        return new View(h.orderNo(),h.revision(),h.statusOrder(),h.branchName(),h.custNo(),h.company(),h.phone(),h.address(),h.notice(),
+                h.dueDate(),h.deadlineApprovalStatus(),h.deadlineApprovedBy(),h.deadlineApprovedAt(),h.total(),products);
     }
     private TreeSet<Long> materialIds(List<Priced> priced) {
         var ids=new TreeSet<Long>();
