@@ -29,7 +29,7 @@ class WorkshopCalculationServiceTest {
     @BeforeEach void setup() throws Exception {
         var user=new User();var role=new Role();role.setName("ROLE_FOREMAN");user.setRoles(List.of(role));when(users.findByUsername("master")).thenReturn(Optional.of(user));
         when(validator.validate(any())).thenReturn(Set.of());
-        when(orders.read(1,auth)).thenReturn(new CalculatedOrderService.View(1,7,2,"Філія",1,"Клієнт","","","",null,n("24"),List.of()));
+        when(orders.read(1,auth)).thenReturn(new CalculatedOrderService.View(1,7,2,"Філія",1,"Клієнт","","","",null,"NOT_REQUIRED",null,null,n("24"),List.of()));
         var component=json.readTree("{\"clientItemId\":\"old\",\"kind\":\"PRODUCT\",\"product\":{\"productType\":\"UNFRAMED_ARTWORK\",\"widthMm\":300,\"heightMm\":400,\"productQuantity\":2,\"glass\":[{\"partNo\":27540,\"quantityPerProduct\":1}]}}");
         product.put("configuration",json.writeValueAsString(Map.of("draft",Map.of("components",List.of(component)))));product.put("calculation",json.writeValueAsString(result(List.of(glass("0.24")))));product.put("production_state","IN_PROGRESS");product.put("production_confirmed",false);
         when(db.queryForList("SELECT configuration,calculation,production_state,production_confirmed,active_rework_id FROM order_products WHERE id=? AND order_no=? AND active=1",10L,1L)).thenReturn(List.of(product));

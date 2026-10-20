@@ -80,12 +80,19 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public List<CustomerDTO> findByPhonePrefix(String prefix) {
         String query = prefix == null ? "" : prefix.trim();
-        if (query.length() < 2) {
+        long searchableCharacters = query.codePoints()
+                .filter(Character::isLetterOrDigit)
+                .count();
+        boolean containsLetters = query.codePoints().anyMatch(Character::isLetter);
+        long digits = query.codePoints().filter(Character::isDigit).count();
+
+        // Phone-only lookups need at least four digits; names/company searches need three
+        // letters or digits. This is a server-side guard in addition to the UI debounce.
+        if ((containsLetters && searchableCharacters < 3) || (!containsLetters && digits < 4)) {
             return List.of();
         }
 
         return customerRepository.searchByAnyField(query, PageRequest.of(0, 20))
-                .getContent()
                 .stream()
                 .map(customer -> new CustomerDTO(
                         customer.getCustNo(),
