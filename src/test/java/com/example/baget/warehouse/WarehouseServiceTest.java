@@ -149,6 +149,30 @@ class WarehouseServiceTest {
         verify(db).update("UPDATE order_products SET pending_location=?,transfer_actor=?,tracking_revision=tracking_revision+1 WHERE id=?","WAREHOUSE","admin",10L);
         verify(db,never()).update(startsWith("UPDATE order_products SET current_location="),any(Object[].class));
     }
+    @Test void acceptingFinalCustomerProductMarksOrderAsReceived() {
+        trackingRow(4,"COMPLETED","BRANCH","CUSTOMER");
+        when(db.queryForObject(
+            "SELECT COUNT(*) FROM order_products WHERE order_no=? AND active=1 AND (COALESCE(current_location,'') <> 'CUSTOMER' OR pending_location IS NOT NULL)",
+            Long.class, 1L)).thenReturn(0L);
+
+        service.transfer("token", new WarehouseService.Transfer(4,"CUSTOMER",""), true, auth);
+
+        verify(db).update(
+            "UPDATE orders SET StatusOrder=12, ClientReceivedDate=COALESCE(ClientReceivedDate,CURRENT_TIMESTAMP(6)) WHERE OrderNo=?",
+            1L);
+    }
+
+    @Test void acceptingCustomerProductDoesNotMarkOrderWhileOtherProductsRemain() {
+        trackingRow(4,"COMPLETED","BRANCH","CUSTOMER");
+        when(db.queryForObject(
+            "SELECT COUNT(*) FROM order_products WHERE order_no=? AND active=1 AND (COALESCE(current_location,'') <> 'CUSTOMER' OR pending_location IS NOT NULL)",
+            Long.class, 1L)).thenReturn(1L);
+
+        service.transfer("token", new WarehouseService.Transfer(4,"CUSTOMER",""), true, auth);
+
+        verify(db, never()).update(startsWith("UPDATE orders SET StatusOrder=12"), any(Object[].class));
+    }
+
     @Test void acceptingRequiresPendingDestination() {
         trackingRow(1,"COMPLETED","WORKSHOP","WAREHOUSE");
         assertThrows(PreviewException.class,()->service.transfer("token",new WarehouseService.Transfer(1,"CUSTOMER",""),true,auth));
