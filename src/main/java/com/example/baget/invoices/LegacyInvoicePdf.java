@@ -1,5 +1,6 @@
 package com.example.baget.invoices;
 
+import com.example.baget.billing.BillingMath;
 import com.example.baget.items.ItemViewDTO;
 import com.example.baget.my_company.CompanyDetails;
 import com.example.baget.my_company.CompanyDetailsService;
@@ -13,6 +14,7 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -87,12 +89,14 @@ public class LegacyInvoicePdf {
         addHeader(table, "Сума, грн", bold);
 
         List<InvoiceOrderViewDTO> orders = invoice.getOrders() == null ? List.of() : invoice.getOrders();
+        List<BigDecimal> displayedAmounts = displayedAmounts(orders, invoice.getTotalAmount());
         int index = 1;
-        for (InvoiceOrderViewDTO order : orders) {
+        for (int orderIndex = 0; orderIndex < orders.size(); orderIndex++) {
+            InvoiceOrderViewDTO order = orders.get(orderIndex);
             addCell(table, String.valueOf(index++), normal, Element.ALIGN_CENTER);
             addCell(table, String.valueOf(order.getOrderNo()), normal, Element.ALIGN_CENTER);
             addCell(table, describeOrder(order, supplier.getWorkTitle()), normal, Element.ALIGN_LEFT);
-            addCell(table, money(order.getAmount()), normal, Element.ALIGN_RIGHT);
+            addCell(table, money(displayedAmounts.get(orderIndex)), normal, Element.ALIGN_RIGHT);
         }
         if (orders.isEmpty()) {
             addCell(table, "1", normal, Element.ALIGN_CENTER);
@@ -118,6 +122,32 @@ public class LegacyInvoicePdf {
         document.add(signature);
         document.close();
         return out.toByteArray();
+    }
+
+    /**
+     * Older invoice merges kept original row amounts while the new invoice total
+     * represented only the outstanding debt. Scale those rows to the saved total
+     * so the printable document balances; normal invoices are unchanged.
+     */
+    private List<BigDecimal> displayedAmounts(List<InvoiceOrderViewDTO> orders, BigDecimal invoiceTotal) {
+        List<BigDecimal> amounts = orders.stream()
+                .map(order -> order.getAmount() == null ? BigDecimal.ZERO : order.getAmount())
+                .toList();
+        if (amounts.isEmpty() || invoiceTotal == null || amounts.stream().anyMatch(v -> v.signum() < 0)) {
+            return amounts;
+        }
+
+        BigDecimal rowsTotal = amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (rowsTotal.signum() <= 0 || rowsTotal.compareTo(invoiceTotal) == 0) return amounts;
+        if (invoiceTotal.signum() < 0) return amounts;
+        if (invoiceTotal.compareTo(rowsTotal) < 0) {
+            return BillingMath.remaining(amounts, invoiceTotal);
+        }
+
+        var adjusted = new ArrayList<>(amounts);
+        int last = adjusted.size() - 1;
+        adjusted.set(last, adjusted.get(last).add(invoiceTotal.subtract(rowsTotal)));
+        return adjusted;
     }
 
     private String describeOrder(InvoiceOrderViewDTO order, String fallback) {
