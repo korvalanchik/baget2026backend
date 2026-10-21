@@ -283,8 +283,25 @@ public class WarehouseService {
         }
         if("CUSTOMER".equals(to))paymentCheck.recordIssue(((Number)p.get("id")).longValue(),r.expectedRevision()+1,accept,a.getName(),creditSnapshot);
         db.update("INSERT INTO product_transfers(product_id,action,from_location,to_location,actor,note) VALUES(?,?,?,?,?,?)",p.get("id"),accept?"ACCEPT":"SEND",from,to,a.getName(),r.note());
+        if(accept && "CUSTOMER".equals(to)) markOrderReceivedIfAllProductsIssued(((Number)p.get("orderNo")).longValue());
         return tracking(token,a);
     }
+
+    /**
+     * Marks an order as received only after every active product has been accepted by the customer.
+     * This runs inside the transfer transaction, while the order row is locked by transfer().
+     */
+    private void markOrderReceivedIfAllProductsIssued(long orderNo) {
+        Long notIssued = db.queryForObject(
+            "SELECT COUNT(*) FROM order_products WHERE order_no=? AND active=1 AND (COALESCE(current_location,'') <> 'CUSTOMER' OR pending_location IS NOT NULL)",
+            Long.class, orderNo);
+        if(notIssued != null && notIssued == 0L) {
+            db.update(
+                "UPDATE orders SET StatusOrder=12, ClientReceivedDate=COALESCE(ClientReceivedDate,CURRENT_TIMESTAMP(6)) WHERE OrderNo=?",
+                orderNo);
+        }
+    }
+
     public Map<String,Object> cancelTransfer(String token,Transfer r,Authentication a) {
         var initial=product(token,false);productAccess(initial,a);
         db.queryForObject("SELECT OrderNo FROM orders WHERE OrderNo=? FOR UPDATE",Long.class,initial.get("orderNo"));
