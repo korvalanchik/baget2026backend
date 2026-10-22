@@ -131,7 +131,7 @@ public class PrroOperationService {
             }
             jdbcTemplate.update("""
                     UPDATE prro_devices
-                       SET active_shift_key = ?, next_local_number = 1
+                       SET active_shift_key = ?
                      WHERE id = ? AND active_shift_key IS NULL
                     """, command.shiftKey(), device.id());
             return 0;
