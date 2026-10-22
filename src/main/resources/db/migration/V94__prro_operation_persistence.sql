@@ -11,7 +11,7 @@ CREATE TABLE prro_devices (
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     CONSTRAINT uq_prro_devices_rro_fn UNIQUE (rro_fn),
     CONSTRAINT chk_prro_devices_environment CHECK (environment IN ('TEST', 'PRODUCTION')),
-    CONSTRAINT chk_prro_devices_local_number CHECK (next_local_number BETWEEN 1 AND 2147483646)
+    CONSTRAINT chk_prro_devices_local_number CHECK (next_local_number BETWEEN 1 AND 2147483647)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE prro_operations (
