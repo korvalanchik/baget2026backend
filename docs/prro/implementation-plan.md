@@ -1,10 +1,12 @@
+
 # PRRO module implementation notes
 
 Official sources:
 - API: https://cabinet.tax.gov.ua/help/api.html
 - DPS API and protocol document index (Electronic Cabinet version 25.02.2025): https://tax.gov.ua/baneryi/programni-rro/opis-ari-fiskalnogo-servera/opis-ari-elektronniy-kabinet/
 - XML check and Z-report transfer protocol: https://tax.gov.ua/data/files/530962.docx
-- DPS notes that local document numbering is continuous per PRRO, separate from the fiscal numbering assigned by the fiscal server: https://zir.tax.gov.ua/main/bz/view/?id=42290&src=ques
+- Older protocol link referenced in the API description: https://tax.gov.ua/data/material/000/311/399207/SZZD_RRO_Protokol_peredach_nformats_2_1_7.doc
+- DPS notes that local document numbering is continuous per PRRO, separate from fiscal numbering: https://zir.tax.gov.ua/main/bz/view/?id=42290&src=ques
 
 ## Foundation
 - gRPC/proto3 contract and generated Java stubs are configured in Gradle.
@@ -27,6 +29,11 @@ Official sources:
 - Submission uses `sendChkV2`. A positive DPS response is stored as `FISCALIZED`; a defined rejection is stored as `REJECTED`.
 - gRPC transport failures and undefined DPS status become `UNKNOWN_RESULT`. Do not blindly retry; reconcile with DPS first.
 
+## Unknown-result inspection
+- `PrroUnknownResultInspectionService` performs read-only `statusRro` and `lastChk` queries for an operation in `UNKNOWN_RESULT`.
+- The caller must supply a signed `CheckRequest`; this module does not keep the PRRO private key.
+- Inspection results are evidence for reconciliation, not an automatic decision. A last-check result by itself does not prove that the target local operation was accepted, so the service does not mutate operation state or retry submissions.
+
 ## Security and production blockers
 - The module does not store private keys or sign XML yet.
 - XML structure, document hash chaining, date-time rules, and QES signature encoding must be implemented only after reviewing the complete current official XML protocol.
@@ -36,4 +43,4 @@ Official sources:
 - Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
-Implement XML generation, previous-document hash chaining, and QES signing after reviewing the current official protocol document and any published examples. Then add protocol-fixture tests and a test-server integration test.
+Review the complete current official protocol and published examples before implementing XML generation, previous-document hash chaining, and QES signing. Then add protocol-fixture tests and a test-server integration test.
