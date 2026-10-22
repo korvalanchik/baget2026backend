@@ -3,6 +3,7 @@
 Official sources:
 - API: https://cabinet.tax.gov.ua/help/api.html
 - DPS API and protocol document index (Electronic Cabinet version 25.02.2025): https://tax.gov.ua/baneryi/programni-rro/opis-ari-fiskalnogo-servera/opis-ari-elektronniy-kabinet/
+- XML check and Z-report transfer protocol: https://tax.gov.ua/data/files/530962.docx
 - DPS notes that local document numbering is continuous per PRRO, separate from the fiscal numbering assigned by the fiscal server: https://zir.tax.gov.ua/main/bz/view/?id=42290&src=ques
 
 ## Foundation
@@ -20,13 +21,19 @@ Official sources:
 - State transitions are explicit. An ambiguous network result is `UNKNOWN_RESULT` and must be reconciled before any further submission.
 - A shift close only clears the active shift after a confirmed fiscalized response. A rejected shift opening clears the prepared active-shift marker; an ambiguous result keeps it for reconciliation.
 
+## Submission orchestration
+- `PrroSubmissionService` accepts only an already signed protocol document; it does not construct XML or perform QES signing.
+- Before transmission it verifies that the operation is in `SIGNED`, the local number and document type match, and the SHA-256 hash of `check_sign` matches the stored signed-document hash.
+- Submission uses `sendChkV2`. A positive DPS response is stored as `FISCALIZED`; a defined rejection is stored as `REJECTED`.
+- gRPC transport failures and undefined DPS status become `UNKNOWN_RESULT`. Do not blindly retry; reconcile with DPS first.
+
 ## Security and production blockers
 - The module does not store private keys or sign XML yet.
-- Signed XML must not be sent until the current official XML protocol and signature/MAC rules are implemented and tested.
+- XML structure, document hash chaining, date-time rules, and QES signature encoding must be implemented only after reviewing the complete current official XML protocol.
 - Never retry a timed-out submission blindly. Use DPS status / last-check reconciliation.
 - Production endpoint selection must remain an explicit deployment decision, not a client-controlled field.
 - Branch authorization and authenticated cashier identity must be wired into protected API endpoints before enabling UI actions.
 - Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
-Implement the XML document builder and signing adapter only after reviewing the current official protocol document. Then add tests with official sample documents and test-server responses.
+Implement XML generation, previous-document hash chaining, and QES signing after reviewing the current official protocol document and any published examples. Then add protocol-fixture tests and a test-server integration test.
