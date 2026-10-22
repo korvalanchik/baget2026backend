@@ -41,10 +41,11 @@ class PrroUnknownResultInspectionServiceTest {
         assertSame(operation, result.operation());
         assertSame(status, result.rroStatus());
         assertSame(last, result.lastCheck());
+
+        verify(operations).get(9L);
         verify(client).getRroStatus(request);
         verify(client).getLastCheck(request);
-        verifyNoMoreInteractions(operations, client);
-    }
+        verifyNoMoreInteractions(operations, client);    }
 
     @Test
     void refusesInspectionWithoutRroSignatureBeforeCallingServices() {
