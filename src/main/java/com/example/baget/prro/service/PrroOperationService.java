@@ -12,9 +12,7 @@ import java.util.regex.Pattern;
 
 /**
  * Persistence and idempotency boundary for PRRO operations.
- *
- * No call to DPS is made here. Network submission must be performed only after
- * a signed document and its hash have been durably recorded.
+ * No call to DPS is made here.
  */
 @Service
 public class PrroOperationService {
@@ -41,16 +39,16 @@ public class PrroOperationService {
             return existing;
         }
 
-        int localNumber = allocateLocalNumber(device, command.sourceType());
+        int localNumber = allocateLocalNumber(device, command);
         jdbcTemplate.update("""
                 INSERT INTO prro_operations
-                    (device_id, idempotency_key, request_hash, source_type, source_reference,
+                    (device_id, shift_key, idempotency_key, request_hash, source_type, source_reference,
                      document_type, local_number, status, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'PREPARED', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', ?)
                 """,
-                command.deviceId(), command.idempotencyKey(), command.requestHash().toLowerCase(Locale.ROOT),
-                command.sourceType(), command.sourceReference(), command.documentType(),
-                localNumber, command.createdBy());
+                command.deviceId(), command.shiftKey(), command.idempotencyKey(),
+                command.requestHash().toLowerCase(Locale.ROOT), command.sourceType(),
+                command.sourceReference(), command.documentType(), localNumber, command.createdBy());
 
         return findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
     }
@@ -66,6 +64,7 @@ public class PrroOperationService {
             throw new IllegalArgumentException("signedDocumentHash must be a SHA-256 hex string");
         }
 
+        Operation before = findById(operationId);
         int changed = jdbcTemplate.update("""
                 UPDATE prro_operations
                    SET status = ?,
@@ -82,6 +81,19 @@ public class PrroOperationService {
             throw new OperationStateConflictException(
                     "PRRO operation was not in expected state " + expected);
         }
+
+        if (before.sourceType().equals("SHIFT_OPEN") && next == Status.REJECTED) {
+            jdbcTemplate.update("""
+                    UPDATE prro_devices SET active_shift_key = NULL
+                     WHERE id = ? AND active_shift_key = ?
+                    """, before.deviceId(), before.shiftKey());
+        }
+        if (before.sourceType().equals("SHIFT_CLOSE") && next == Status.FISCALIZED) {
+            jdbcTemplate.update("""
+                    UPDATE prro_devices SET active_shift_key = NULL
+                     WHERE id = ? AND active_shift_key = ?
+                    """, before.deviceId(), before.shiftKey());
+        }
         return findById(operationId);
     }
 
@@ -93,7 +105,7 @@ public class PrroOperationService {
     private Device lockDevice(long deviceId) {
         try {
             return jdbcTemplate.queryForObject("""
-                    SELECT id, environment, enabled, next_local_number
+                    SELECT id, environment, enabled, active_shift_key, next_local_number
                       FROM prro_devices
                      WHERE id = ?
                      FOR UPDATE
@@ -101,20 +113,32 @@ public class PrroOperationService {
                     rs.getLong("id"),
                     rs.getString("environment"),
                     rs.getBoolean("enabled"),
+                    rs.getString("active_shift_key"),
                     rs.getInt("next_local_number")), deviceId);
         } catch (EmptyResultDataAccessException ex) {
             throw new IllegalArgumentException("PRRO device not found: " + deviceId, ex);
         }
     }
 
-    private int allocateLocalNumber(Device device, String sourceType) {
+    private int allocateLocalNumber(Device device, PrepareOperation command) {
         if (!device.enabled()) {
             throw new IllegalStateException("PRRO device is disabled");
         }
-        if ("SHIFT_OPEN".equals(sourceType)) {
-            // A shift-opening service document must always have local number 0.
-            // It does not consume the ordinary sales sequence.
+
+        if ("SHIFT_OPEN".equals(command.sourceType())) {
+            if (device.activeShiftKey() != null) {
+                throw new IllegalStateException("PRRO device already has an active shift");
+            }
+            jdbcTemplate.update("""
+                    UPDATE prro_devices
+                       SET active_shift_key = ?, next_local_number = 1
+                     WHERE id = ? AND active_shift_key IS NULL
+                    """, command.shiftKey(), device.id());
             return 0;
+        }
+
+        if (device.activeShiftKey() == null || !device.activeShiftKey().equals(command.shiftKey())) {
+            throw new IllegalStateException("The requested PRRO shift is not active");
         }
 
         int localNumber = device.nextLocalNumber();
@@ -129,7 +153,7 @@ public class PrroOperationService {
     private Operation findByIdempotencyKey(long deviceId, String key) {
         try {
             return jdbcTemplate.queryForObject("""
-                    SELECT id, device_id, idempotency_key, request_hash, source_type,
+                    SELECT id, device_id, shift_key, idempotency_key, request_hash, source_type,
                            source_reference, document_type, local_number, status,
                            signed_document_hash, fiscal_document_id, response_code,
                            response_message, created_by
@@ -144,7 +168,7 @@ public class PrroOperationService {
     private Operation findById(long id) {
         try {
             return jdbcTemplate.queryForObject("""
-                    SELECT id, device_id, idempotency_key, request_hash, source_type,
+                    SELECT id, device_id, shift_key, idempotency_key, request_hash, source_type,
                            source_reference, document_type, local_number, status,
                            signed_document_hash, fiscal_document_id, response_code,
                            response_message, created_by
@@ -158,6 +182,7 @@ public class PrroOperationService {
 
     private void validate(PrepareOperation command) {
         Objects.requireNonNull(command, "command");
+        requireText(command.shiftKey(), "shiftKey", 64);
         requireText(command.idempotencyKey(), "idempotencyKey", 100);
         requireText(command.requestHash(), "requestHash", 64);
         requireText(command.sourceType(), "sourceType", 24);
@@ -166,13 +191,25 @@ public class PrroOperationService {
         if (!SHA_256.matcher(command.requestHash()).matches()) {
             throw new IllegalArgumentException("requestHash must be a SHA-256 hex string");
         }
-        if (!("PAYMENT".equals(command.sourceType()) || "SHIFT_OPEN".equals(command.sourceType())
-                || "SHIFT_CLOSE".equals(command.sourceType()) || "SERVICE".equals(command.sourceType()))) {
-            throw new IllegalArgumentException("Unsupported PRRO sourceType");
+
+        boolean supportedSource = "PAYMENT".equals(command.sourceType())
+                || "SHIFT_OPEN".equals(command.sourceType())
+                || "SHIFT_CLOSE".equals(command.sourceType())
+                || "SERVICE".equals(command.sourceType());
+        boolean supportedDocument = "CHK".equals(command.documentType())
+                || "ZREPORT".equals(command.documentType())
+                || "SERVICECHK".equals(command.documentType());
+        if (!supportedSource || !supportedDocument) {
+            throw new IllegalArgumentException("Unsupported PRRO source or document type");
         }
-        if (!("CHK".equals(command.documentType()) || "ZREPORT".equals(command.documentType())
-                || "SERVICECHK".equals(command.documentType()))) {
-            throw new IllegalArgumentException("Unsupported PRRO documentType");
+        if ("PAYMENT".equals(command.sourceType()) && !"CHK".equals(command.documentType())) {
+            throw new IllegalArgumentException("PAYMENT operations must use CHK documents");
+        }
+        if ("SHIFT_OPEN".equals(command.sourceType()) && !"SERVICECHK".equals(command.documentType())) {
+            throw new IllegalArgumentException("SHIFT_OPEN operations must use SERVICECHK documents");
+        }
+        if ("SHIFT_CLOSE".equals(command.sourceType()) && !"ZREPORT".equals(command.documentType())) {
+            throw new IllegalArgumentException("SHIFT_CLOSE operations must use ZREPORT documents");
         }
         if (command.sourceReference() != null && command.sourceReference().length() > 128) {
             throw new IllegalArgumentException("sourceReference exceeds 128 characters");
@@ -201,23 +238,21 @@ public class PrroOperationService {
     }
 
     private static String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
+        return value == null || value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
-    private record Device(long id, String environment, boolean enabled, int nextLocalNumber) {}
+    private record Device(long id, String environment, boolean enabled, String activeShiftKey,
+                          int nextLocalNumber) {}
 
-    public record PrepareOperation(long deviceId, String idempotencyKey, String requestHash,
-                                   String sourceType, String sourceReference, String documentType,
-                                   String createdBy) {}
+    public record PrepareOperation(long deviceId, String shiftKey, String idempotencyKey,
+                                   String requestHash, String sourceType, String sourceReference,
+                                   String documentType, String createdBy) {}
 
-    public record Operation(long id, long deviceId, String idempotencyKey, String requestHash,
-                            String sourceType, String sourceReference, String documentType,
-                            int localNumber, Status status, String signedDocumentHash,
-                            String fiscalDocumentId, Integer responseCode, String responseMessage,
-                            String createdBy) {}
+    public record Operation(long id, long deviceId, String shiftKey, String idempotencyKey,
+                            String requestHash, String sourceType, String sourceReference,
+                            String documentType, int localNumber, Status status,
+                            String signedDocumentHash, String fiscalDocumentId,
+                            Integer responseCode, String responseMessage, String createdBy) {}
 
     public enum Status {
         PREPARED, SIGNED, SENDING, FISCALIZED, REJECTED, UNKNOWN_RESULT
@@ -234,17 +269,17 @@ public class PrroOperationService {
     private static final RowMapper<Operation> OPERATION_ROW_MAPPER = (rs, rowNum) -> {
         int responseCode = rs.getInt("response_code");
         Integer responseCodeValue = rs.wasNull() ? null : responseCode;
-        String status = rs.getString("status");
         return new Operation(
                 rs.getLong("id"),
                 rs.getLong("device_id"),
+                rs.getString("shift_key"),
                 rs.getString("idempotency_key"),
                 rs.getString("request_hash"),
                 rs.getString("source_type"),
                 rs.getString("source_reference"),
                 rs.getString("document_type"),
                 rs.getInt("local_number"),
-                Status.valueOf(status),
+                Status.valueOf(rs.getString("status")),
                 rs.getString("signed_document_hash"),
                 rs.getString("fiscal_document_id"),
                 responseCodeValue,
