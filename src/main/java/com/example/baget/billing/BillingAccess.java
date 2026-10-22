@@ -16,6 +16,17 @@ public class BillingAccess {
         if(u.getRoles().stream().noneMatch(r->Set.of("ROLE_ADMIN","ROLE_COUNTER","ROLE_ACCOUNTANT","ROLE_BOOKKEEPER").contains(r.getName())))throw denied();
         return u;
     }
+    /**
+     * Read-only access for invoices opened from the CRM customer card.
+     * This is deliberately broader than accountant-only product billing access,
+     * but still requires an allowed CRM role and branch-level invoice scope.
+     */
+    public User customerInvoiceUser(Authentication a){
+        if(a==null || !a.isAuthenticated())throw new PreviewException(HttpStatus.UNAUTHORIZED,"AUTH_REQUIRED","Увійдіть до системи");
+        var u=users.findByUsername(a.getName()).orElseThrow(()->denied());
+        if(u.getRoles().stream().noneMatch(r->Set.of("ROLE_ADMIN","ROLE_COUNTER","ROLE_ACCOUNTANT","ROLE_BOOKKEEPER","ROLE_MANAGER","ROLE_SELLER","ROLE_LEVEL2","ROLE_FOREMAN").contains(r.getName())))throw denied();
+        return u;
+    }
     public boolean admin(User u){return u.getRoles().stream().anyMatch(r->r.getName().equals("ROLE_ADMIN"));}
     public void branch(User u,long id){if(!admin(u)&&u.getAllowedBranches().stream().noneMatch(b->b.getBranchNo()==id))throw denied();}
     public void invoice(User u,long id){

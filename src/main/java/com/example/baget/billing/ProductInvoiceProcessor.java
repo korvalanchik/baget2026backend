@@ -109,7 +109,15 @@ public class ProductInvoiceProcessor {
   for(var row:rows)row.put("debt",ledger.calculateInvoiceDebt(((Number)row.get("id")).longValue()));return rows;
  }
  public Map<String,Object> read(long id,Authentication a){
-  var u=access.user(a);access.invoice(u,id);
+  var u=access.user(a);
+  return readInvoiceData(id,u);
+ }
+ public Map<String,Object> readForCustomerCard(long id,Authentication a){
+  var u=access.customerInvoiceUser(a);
+  return readInvoiceData(id,u);
+ }
+ private Map<String,Object> readInvoiceData(long id,com.example.baget.users.User u){
+  access.invoice(u,id);
   var header=db.queryForMap("SELECT i.id,i.invoice_no AS invoiceNo,i.total_amount AS amount,i.status,i.lifecycle,i.note,i.customer_id AS payerId,i.created_at AS createdAt,c.Company AS payerName FROM invoices i JOIN customer c ON c.CustNo=i.customer_id WHERE i.id=?",id);
   var lines=db.queryForList("SELECT ip.product_id AS productId,ip.order_no AS orderNo,ip.confirmed_revision AS confirmedRevision,ip.original_amount AS originalAmount,ip.billed_amount AS amount,ip.source_invoice_id AS sourceInvoiceId,s.invoice_no AS sourceInvoiceNo,ip.snapshot FROM invoice_products ip LEFT JOIN invoices s ON s.id=ip.source_invoice_id WHERE ip.invoice_id=? ORDER BY ip.product_id",id);
   if(lines.isEmpty())throw conflict("Це рахунок старого формату");
