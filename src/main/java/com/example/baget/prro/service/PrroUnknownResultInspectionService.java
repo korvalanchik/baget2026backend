@@ -4,6 +4,7 @@ import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.programika.rro.ws.chk.CheckRequest;
 import com.programika.rro.ws.chk.CheckResponse;
 import com.programika.rro.ws.chk.StatusResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
@@ -14,6 +15,7 @@ import java.util.Objects;
  * retries or mutates an operation automatically.
  */
 @Service
+@ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroUnknownResultInspectionService {
 
     private final PrroOperationService operations;
