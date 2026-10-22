@@ -32,7 +32,8 @@ public class PrroOperationService {
         Device device = lockDevice(command.deviceId());
         Operation existing = findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
         if (existing != null) {
-            if (!existing.requestHash().equalsIgnoreCase(command.requestHash())) {
+            if (!existing.requestHash().equalsIgnoreCase(command.requestHash())
+                    || !existing.shiftKey().equals(command.shiftKey())) {
                 throw new IdempotencyConflictException(
                         "Idempotency key was already used for a different request");
             }
