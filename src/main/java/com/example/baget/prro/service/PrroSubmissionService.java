@@ -4,6 +4,7 @@ import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.programika.rro.ws.chk.Check;
 import com.programika.rro.ws.chk.CheckResponse;
 import io.grpc.StatusRuntimeException;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -19,6 +20,7 @@ import java.util.Objects;
  * they are implemented against the complete current DPS protocol.
  */
 @Service
+@ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroSubmissionService {
 
     private final PrroOperationService operations;
