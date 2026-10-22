@@ -1,6 +1,9 @@
 # PRRO module implementation notes
 
-Official API: https://cabinet.tax.gov.ua/help/api.html
+Official sources:
+- API: https://cabinet.tax.gov.ua/help/api.html
+- DPS API and protocol document index (Electronic Cabinet version 25.02.2025): https://tax.gov.ua/baneryi/programni-rro/opis-ari-fiskalnogo-servera/opis-ari-elektronniy-kabinet/
+- DPS notes that local document numbering is continuous per PRRO, separate from the fiscal numbering assigned by the fiscal server: https://zir.tax.gov.ua/main/bz/view/?id=42290&src=ques
 
 ## Foundation
 - gRPC/proto3 contract and generated Java stubs are configured in Gradle.
@@ -11,8 +14,8 @@ Official API: https://cabinet.tax.gov.ua/help/api.html
 - `prro_devices` holds the registered PRRO identity, environment, enabled flag, active shift key, and next local number.
 - `prro_operations` holds an idempotency key, request fingerprint, shift key, local number, state, signed-document hash, fiscal document id, and DPS response metadata.
 - Device row locking serializes local-number allocation for one PRRO.
-- Local numbers are unique within a shift, not across the device lifetime.
-- Shift opening uses local number 0; ordinary documents use the next positive local number.
+- Local document numbers are continuous per PRRO; opening a shift is the protocol exception with local number 0. Opening a new shift must not reset the regular local-number sequence.
+- Local numbers are unique within a shift in storage, allowing the special opening number 0 for each shift.
 - A repeated idempotency key with the same request hash returns the existing operation. Reusing it with a different hash is a conflict.
 - State transitions are explicit. An ambiguous network result is `UNKNOWN_RESULT` and must be reconciled before any further submission.
 - A shift close only clears the active shift after a confirmed fiscalized response. A rejected shift opening clears the prepared active-shift marker; an ambiguous result keeps it for reconciliation.
@@ -26,4 +29,4 @@ Official API: https://cabinet.tax.gov.ua/help/api.html
 - Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
-Implement the XML document builder and signing adapter only after reviewing the current DPS protocol document published from the official PRRO documentation page. Then add tests with official sample documents and test-server responses.
+Implement the XML document builder and signing adapter only after reviewing the current official protocol document. Then add tests with official sample documents and test-server responses.
