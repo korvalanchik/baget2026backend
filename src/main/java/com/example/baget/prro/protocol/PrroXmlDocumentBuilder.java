@@ -14,7 +14,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Builds unsigned XML packets for a general-purpose PRRO.
+ * Builds canonical, unsigned XML packets for a general-purpose PRRO.
  *
  * <p>The returned document is the DAT portion only. This class deliberately
  * does not calculate MAC, previous-document hashes, QES signatures, or the
