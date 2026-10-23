@@ -24,6 +24,18 @@ Official sources:
 - State transitions are explicit. An ambiguous network result is `UNKNOWN_RESULT` and must be reconciled before any further submission.
 - A shift close only clears the active shift after a confirmed fiscalized response. A rejected shift opening clears the prepared active-shift marker; an ambiguous result keeps it for reconciliation.
 
+## Shift signer identity
+
+The Electronic Cabinet API documentation states that all checks after a shift is opened must be signed with the same signature. Its `infoRro` response exposes operator information, including the operator's public key identifier in `serial`.
+
+- Migration V95 adds `active_signer_key_id` to `prro_devices` and `signer_key_id` to `prro_operations`. These are identifiers only; they must never contain a private key, password, or signature bytes.
+- Preparing a shift-opening operation binds the active shift to the supplied signer key identifier. Further operation preparation rejects a different identifier for that active shift.
+- A rejected shift opening and a successfully fiscalized shift close clear the active shift and signer binding. An ambiguous shift-opening result keeps the binding until reconciliation.
+- If an already-active shift has no recorded signer identifier (for example, because it predates this migration), new operations fail closed until the shift is reconciled. The service does not guess the signer from historical operations.
+- This first pass requires the same signer for shift close as well. The API documents a senior-cashier exception for closing a shift; support for that exception is deferred until the integration can validate senior-cashier authorization from trusted DPS operator data.
+
+This enforces signer identity at the persistence boundary, but does not perform QES signing and does not prove that the supplied key identifier matches the certificate used by a signer adapter. That binding must be checked when the signer integration is introduced.
+
 ## XML protocol and canonicalization (version 2.2.3, revision 3.1)
 
 The reviewed protocol document is dated 18 February 2025. For general-purpose receipt packets it describes a `DAT` element containing a `C` receipt, a packet timestamp `TS`, and receipt operations such as `P` (sale item), `M` (payment), and `E` (receipt closing). A Z-report uses a `Z` element within `DAT`. The protocol represents monetary values in minor units (amount in UAH multiplied by 100) and quantities in thousandths (quantity multiplied by 1000).
@@ -64,4 +76,4 @@ Therefore `PrroXmlDocumentBuilder` and `PrroXmlCanonicalizer` are not connected 
 - Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
-Confirm the API's exact signed-payload / QES container and previous-Check hash encoding against an official fixture or a DPS-provided test vector. Then implement the signing/hash-chain layer behind a separate interface, add fixture-based tests, and only afterward connect the generated XML to submission orchestration.
+Confirm the API's exact signed-payload / QES container and previous-Check hash encoding against an official fixture or a DPS-provided test vector. Then implement a signer adapter that verifies its certificate key identifier matches the active shift binding, implement the previous-document hash chain behind a separate interface, add fixture-based tests, and only afterward connect the generated XML to submission orchestration.

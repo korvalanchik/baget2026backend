@@ -23,7 +23,7 @@ class PrroOperationServiceTest {
     void rejectsRequestHashThatIsNotSha256BeforeAccessingDatabase() {
         var command = new PrroOperationService.PrepareOperation(
                 1L, "shift-1", "payment-42", "not-a-hash",
-                "PAYMENT", "42", "CHK", "cashier");
+                "PAYMENT", "42", "CHK", "cashier", "operator-key-1");
 
         assertThrows(IllegalArgumentException.class, () -> service.prepare(command));
         verifyNoInteractions(jdbcTemplate);
@@ -33,10 +33,40 @@ class PrroOperationServiceTest {
     void rejectsPaymentUsingNonReceiptDocumentTypeBeforeAccessingDatabase() {
         var command = new PrroOperationService.PrepareOperation(
                 1L, "shift-1", "payment-42", "a".repeat(64),
-                "PAYMENT", "42", "ZREPORT", "cashier");
+                "PAYMENT", "42", "ZREPORT", "cashier", "operator-key-1");
 
         assertThrows(IllegalArgumentException.class, () -> service.prepare(command));
         verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsMissingSignerKeyIdBeforeAccessingDatabase() {
+        var command = new PrroOperationService.PrepareOperation(
+                1L, "shift-1", "payment-42", "a".repeat(64),
+                "PAYMENT", "42", "CHK", "cashier", "  ");
+
+        assertThrows(IllegalArgumentException.class, () -> service.prepare(command));
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void trimsSignerKeyIdOnPrepareCommand() {
+        var command = new PrroOperationService.PrepareOperation(
+                1L, "shift-1", "payment-42", "a".repeat(64),
+                "PAYMENT", "42", "CHK", "cashier", "  operator-key-1  ");
+
+        org.junit.jupiter.api.Assertions.assertEquals("operator-key-1", command.signerKeyId());
+    }
+
+    @Test
+    void permitsOnlyTheSignerBoundToTheActiveShift() {
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+                () -> PrroOperationService.validateActiveSignerKey("operator-key-1", "operator-key-1"));
+
+        assertThrows(IllegalStateException.class,
+                () -> PrroOperationService.validateActiveSignerKey("operator-key-1", "operator-key-2"));
+        assertThrows(IllegalStateException.class,
+                () -> PrroOperationService.validateActiveSignerKey(null, "operator-key-1"));
     }
 
     @Test
