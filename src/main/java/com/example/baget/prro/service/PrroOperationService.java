@@ -147,14 +147,7 @@ public class PrroOperationService {
         if (device.activeShiftKey() == null || !device.activeShiftKey().equals(command.shiftKey())) {
             throw new IllegalStateException("The requested PRRO shift is not active");
         }
-        if (device.activeSignerKeyId() == null || device.activeSignerKeyId().isBlank()) {
-            throw new IllegalStateException(
-                    "The active PRRO shift has no recorded signer; reconcile the shift before preparing documents");
-        }
-        if (!device.activeSignerKeyId().equals(command.signerKeyId())) {
-            throw new IllegalStateException(
-                    "All documents in an active PRRO shift must use the same signer key");
-        }
+        validateActiveSignerKey(device.activeSignerKeyId(), command.signerKeyId());
 
         int localNumber = device.nextLocalNumber();
         if (localNumber < 1 || localNumber > 2_147_483_646) {
@@ -163,6 +156,17 @@ public class PrroOperationService {
         jdbcTemplate.update("UPDATE prro_devices SET next_local_number = ? WHERE id = ?",
                 localNumber + 1, device.id());
         return localNumber;
+    }
+
+    static void validateActiveSignerKey(String activeSignerKeyId, String requestedSignerKeyId) {
+        if (activeSignerKeyId == null || activeSignerKeyId.isBlank()) {
+            throw new IllegalStateException(
+                    "The active PRRO shift has no recorded signer; reconcile the shift before preparing documents");
+        }
+        if (!activeSignerKeyId.equals(requestedSignerKeyId)) {
+            throw new IllegalStateException(
+                    "All documents in an active PRRO shift must use the same signer key");
+        }
     }
 
     private Operation findByIdempotencyKey(long deviceId, String key) {
