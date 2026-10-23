@@ -9,9 +9,9 @@ import com.programika.rro.ws.chk.RroInfoResponse;
 import com.programika.rro.ws.chk.StatusResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import java.util.concurrent.TimeUnit;
 
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Thin transport adapter for the official DPS gRPC API.
