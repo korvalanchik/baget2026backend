@@ -11,48 +11,48 @@ Official sources:
 ## Foundation
 - gRPC/proto3 contract and generated Java stubs are configured in Gradle.
 - The transport client is isolated from fiscal business logic.
-- Every gRPC call uses a configurable deadline (\`BAGET_PRRO_RPC_DEADLINE_MILLIS\`, default 15000 ms). A submission timeout is treated as an ambiguous outcome by \`PrroSubmissionService\` and must be reconciled before any retry.
+- Every gRPC call uses a configurable deadline (`BAGET_PRRO_RPC_DEADLINE_MILLIS`, default 15000 ms). A submission timeout is treated as an ambiguous outcome by `PrroSubmissionService` and must be reconciled before any retry.
 - The default endpoint is the DPS developer endpoint and PRRO is disabled by default.
 
 ## Operation persistence (V94)
-- \`prro_devices\` holds the registered PRRO identity, environment, enabled flag, active shift key, and next local number.
-- \`prro_operations\` holds an idempotency key, request fingerprint, shift key, local number, state, signed-document hash, fiscal document id, and DPS response metadata.
+- `prro_devices` holds the registered PRRO identity, environment, enabled flag, active shift key, and next local number.
+- `prro_operations` holds an idempotency key, request fingerprint, shift key, local number, state, signed-document hash, fiscal document id, and DPS response metadata.
 - Device row locking serializes local-number allocation for one PRRO.
 - Local document numbers are continuous per PRRO; opening a shift is the protocol exception with local number 0. Opening a new shift must not reset the regular local-number sequence.
 - Local numbers are unique within a shift in storage, allowing the special opening number 0 for each shift.
 - A repeated idempotency key with the same request hash returns the existing operation. Reusing it with a different hash is a conflict.
-- State transitions are explicit. An ambiguous network result is \`UNKNOWN_RESULT\` and must be reconciled before any further submission.
+- State transitions are explicit. An ambiguous network result is `UNKNOWN_RESULT` and must be reconciled before any further submission.
 - A shift close only clears the active shift after a confirmed fiscalized response. A rejected shift opening clears the prepared active-shift marker; an ambiguous result keeps it for reconciliation.
 
 ## XML protocol and canonicalization (version 2.2.3, revision 3.1)
 
-The reviewed protocol document is dated 18 February 2025. For general-purpose receipt packets it describes a \`DAT\` element containing a \`C\` receipt, a packet timestamp \`TS\`, and receipt operations such as \`P\` (sale item), \`M\` (payment), and \`E\` (receipt closing). A Z-report uses a \`Z\` element within \`DAT\`. The protocol represents monetary values in minor units (amount in UAH multiplied by 100) and quantities in thousandths (quantity multiplied by 1000).
+The reviewed protocol document is dated 18 February 2025. For general-purpose receipt packets it describes a `DAT` element containing a `C` receipt, a packet timestamp `TS`, and receipt operations such as `P` (sale item), `M` (payment), and `E` (receipt closing). A Z-report uses a `Z` element within `DAT`. The protocol represents monetary values in minor units (amount in UAH multiplied by 100) and quantities in thousandths (quantity multiplied by 1000).
 
-Appendix A documents canonicalization rules: remove formatting whitespace between tags, expand empty elements to explicit opening/closing tags, normalize spacing in tag syntax, and sort attributes alphabetically. \`PrroXmlCanonicalizer\` implements these representation-level transformations and is tested against the Appendix A receipt example.
+Appendix A documents canonicalization rules: remove formatting whitespace between tags, expand empty elements to explicit opening/closing tags, normalize spacing in tag syntax, and sort attributes alphabetically. `PrroXmlCanonicalizer` implements these representation-level transformations and is tested against the Appendix A receipt example.
 - Ambiguity to resolve before signing: rule 3's prose mentions whitespace in start-tags, while its example also normalizes runs of spaces/tabs in text content. The current utility follows the example; this behavior remains isolated and must be confirmed before it is used to produce signed XML.
 
 ## XML document builder
-- \`PrroXmlDocumentBuilder\` creates unsigned \`DAT\` XML payloads for general-purpose sale/return checks (\`CHK\`) and Z-reports (\`ZREPORT\`).
-- CHK support currently includes \`C\`, \`P\`, \`M\`, \`E\`, packet \`TS\`, single-tax closing attributes, and multiple-tax child \`TX\` elements. ZREPORT support includes \`Z\`, \`TXS\`, payment turnover \`M\`, cash movement \`IO\`, check counts \`NC\`, and packet \`TS\`.
-- The input API uses \`BigDecimal\` values in UAH and natural quantity units. The builder converts money to integer kopecks and quantity to thousandths without rounding; values exceeding the protocol precision are rejected.
-- The builder supports only the general-purpose device format (\`DT=0\`, \`V=1\`). Specialized RRO formats and less-common receipt operations are intentionally not implemented yet.
-- The caller must provide a unique packet identifier \`DI\` for each PRRO and the fiscal receipt number \`NO\` separately. These are not inferred from the internal operation local number.
-- The output is an unsigned \`DAT\` element only. It does not include a \`MAC\` sibling and is not a complete signed document for \`Check.check_sign\`; do not send it directly to DPS.
+- `PrroXmlDocumentBuilder` creates unsigned `DAT` XML payloads for general-purpose sale/return checks (`CHK`) and Z-reports (`ZREPORT`).
+- CHK support currently includes `C`, `P`, `M`, `E`, packet `TS`, single-tax closing attributes, and multiple-tax child `TX` elements. ZREPORT support includes `Z`, `TXS`, payment turnover `M`, cash movement `IO`, check counts `NC`, and packet `TS`.
+- The input API uses `BigDecimal` values in UAH and natural quantity units. The builder converts money to integer kopecks and quantity to thousandths without rounding; values exceeding the protocol precision are rejected.
+- The builder supports only the general-purpose device format (`DT=0`, `V=1`). Specialized RRO formats and less-common receipt operations are intentionally not implemented yet.
+- The caller must provide a unique packet identifier `DI` for each PRRO and the fiscal receipt number `NO` separately. These are not inferred from the internal operation local number.
+- The output is an unsigned `DAT` element only. It does not include a `MAC` sibling and is not a complete signed document for `Check.check_sign`; do not send it directly to DPS.
 
 ## Remaining signing/hash-chain boundary
-The separate PRRO gRPC API description says \`Check.check_sign\` must carry a signed XML document and that each Check XML (except connection ping) includes the hash of the preceding Check XML. The supplied information-transfer document describes \`MAC\` as a Base64 value calculated for \`DAT\`, but the reviewed passages do not define the cryptographic MAC algorithm or fully specify how the gRPC API's previous-document hash is encoded together with the QES-signed payload. These are not interchangeable assumptions.
+The separate PRRO gRPC API description says `Check.check_sign` must carry a signed XML document and that each Check XML (except connection ping) includes the hash of the preceding Check XML. The supplied information-transfer document describes `MAC` as a Base64 value calculated for `DAT`, but the reviewed passages do not define the cryptographic MAC algorithm or fully specify how the gRPC API's previous-document hash is encoded together with the QES-signed payload. These are not interchangeable assumptions.
 
-Therefore \`PrroXmlDocumentBuilder\` and \`PrroXmlCanonicalizer\` are not connected to \`PrroSubmissionService\`: neither creates a MAC, hash-chain field, QES signature, nor the final gRPC payload. Those steps must follow an explicitly verified API/signature contract and fixture tests.
+Therefore `PrroXmlDocumentBuilder` and `PrroXmlCanonicalizer` are not connected to `PrroSubmissionService`: neither creates a MAC, hash-chain field, QES signature, nor the final gRPC payload. Those steps must follow an explicitly verified API/signature contract and fixture tests.
 
 ## Submission orchestration
-- \`PrroSubmissionService\` accepts only an already signed protocol document; it does not construct XML or perform QES signing.
-- Before transmission it verifies that the operation is in \`SIGNED\`, the local number and document type match, and the SHA-256 hash of \`check_sign\` matches the stored signed-document hash.
-- Submission uses \`sendChkV2\`. A positive DPS response is stored as \`FISCALIZED\`; a defined rejection is stored as \`REJECTED\`.
-- gRPC transport failures and undefined DPS status become \`UNKNOWN_RESULT\`. Do not blindly retry; reconcile with DPS first.
+- `PrroSubmissionService` accepts only an already signed protocol document; it does not construct XML or perform QES signing.
+- Before transmission it verifies that the operation is in `SIGNED`, the local number and document type match, and the SHA-256 hash of `check_sign` matches the stored signed-document hash.
+- Submission uses `sendChkV2`. A positive DPS response is stored as `FISCALIZED`; a defined rejection is stored as `REJECTED`.
+- gRPC transport failures and undefined DPS status become `UNKNOWN_RESULT`. Do not blindly retry; reconcile with DPS first.
 
 ## Unknown-result inspection
-- \`PrroUnknownResultInspectionService\` performs read-only \`statusRro\` and \`lastChk\` queries for an operation in \`UNKNOWN_RESULT\`.
-- The caller must supply a signed \`CheckRequest\`; this module does not keep the PRRO private key.
+- `PrroUnknownResultInspectionService` performs read-only `statusRro` and `lastChk` queries for an operation in `UNKNOWN_RESULT`.
+- The caller must supply a signed `CheckRequest`; this module does not keep the PRRO private key.
 - Inspection results are evidence for reconciliation, not an automatic decision. A last-check result by itself does not prove that the target local operation was accepted, so the service does not mutate operation state or retry submissions.
 
 ## Security and production blockers
@@ -61,7 +61,7 @@ Therefore \`PrroXmlDocumentBuilder\` and \`PrroXmlCanonicalizer\` are not connec
 - Never retry a timed-out submission blindly. Use DPS status / last-check reconciliation.
 - Production endpoint selection must remain an explicit deployment decision, not a client-controlled field.
 - Branch authorization and authenticated cashier identity must be wired into protected API endpoints before enabling UI actions.
-- Test receipts sent to \`cabinet.tax.gov.ua:9443\` are not fiscal receipts.
+- Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
 Confirm the API's exact signed-payload / QES container and previous-Check hash encoding against an official fixture or a DPS-provided test vector. Then implement the signing/hash-chain layer behind a separate interface, add fixture-based tests, and only afterward connect the generated XML to submission orchestration.
