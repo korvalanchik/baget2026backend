@@ -29,6 +29,7 @@ Official sources:
 The reviewed protocol document is dated 18 February 2025. For general-purpose receipt packets it describes a `DAT` element containing a `C` receipt, a packet timestamp `TS`, and receipt operations such as `P` (sale item), `M` (payment), and `E` (receipt closing). A Z-report uses a `Z` element within `DAT`. The protocol represents monetary values in minor units (amount in UAH multiplied by 100) and quantities in thousandths (quantity multiplied by 1000).
 
 Appendix A documents canonicalization rules: remove formatting whitespace between tags, expand empty elements to explicit opening/closing tags, normalize spacing in tag syntax, and sort attributes alphabetically. `PrroXmlCanonicalizer` implements these representation-level transformations and is tested against the Appendix A receipt example.
+- Ambiguity to resolve before signing: rule 3's prose mentions whitespace in start-tags, while its example also normalizes runs of spaces/tabs in text content. The current utility follows the example; this behavior remains isolated and must be confirmed before it is used to produce signed XML.
 
 ### Remaining signing/hash-chain boundary
 
