@@ -108,16 +108,27 @@ public final class PrroXmlDocumentBuilder {
     }
 
     private static void validateCheckOperations(CheckDocument document) {
+        java.util.Set<Integer> operationNumbers = new java.util.HashSet<>();
         int maxOperationNumber = 0;
         for (SaleItem item : document.items()) {
+            if (!operationNumbers.add(item.operationNumber())) {
+                throw new IllegalArgumentException("Duplicate receipt operation number: " + item.operationNumber());
+            }
             maxOperationNumber = Math.max(maxOperationNumber, item.operationNumber());
         }
         for (Payment payment : document.payments()) {
+            if (!operationNumbers.add(payment.operationNumber())) {
+                throw new IllegalArgumentException("Duplicate receipt operation number: " + payment.operationNumber());
+            }
             maxOperationNumber = Math.max(maxOperationNumber, payment.operationNumber());
         }
         if (document.closing().operationNumber() <= maxOperationNumber) {
             throw new IllegalArgumentException(
                     "Closing operation number must follow all item and payment operation numbers");
+        }
+        if (!operationNumbers.add(document.closing().operationNumber())) {
+            throw new IllegalArgumentException("Duplicate receipt operation number: "
+                    + document.closing().operationNumber());
         }
     }
 
@@ -416,8 +427,10 @@ public final class PrroXmlDocumentBuilder {
                 }
                 quantityToThousandths(quantity);
                 if (quantity.compareTo(BigDecimal.ONE) != 0) {
-                    Objects.requireNonNull(unitPriceUah,
-                            "unitPriceUah is required when quantity differs from one");
+                    if (unitPriceUah == null) {
+                        throw new IllegalArgumentException(
+                                "unitPriceUah is required when quantity differs from one");
+                    }
                     requireAmount(unitPriceUah, "unitPriceUah");
                 }
             }
@@ -568,7 +581,7 @@ public final class PrroXmlDocumentBuilder {
             action.write(xml);
             xml.flush();
             xml.close();
-            return output.toString();
+            return new PrroXmlCanonicalizer().canonicalize(output.toString());
         } catch (XMLStreamException ex) {
             throw new IllegalStateException("Unable to build PRRO XML packet", ex);
         } finally {
