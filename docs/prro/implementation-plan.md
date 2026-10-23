@@ -51,6 +51,16 @@ Appendix A documents canonicalization rules: remove formatting whitespace betwee
 - The caller must provide a unique packet identifier `DI` for each PRRO and the fiscal receipt number `NO` separately. These are not inferred from the internal operation local number.
 - The output is a canonical, unsigned `DAT` element only. It does not include a `MAC` sibling and is not a complete signed document for `Check.check_sign`; do not send it directly to DPS.
 
+## Signing orchestration boundary
+
+- `PrroDocumentSigner` is an adapter interface for a future signing implementation. Its result contains the exact bytes to pass to `Check.check_sign` and the key ID derived from the actual signing certificate/key.
+- `PrroSigningService` accepts only a `PREPARED` operation with a bound signer ID, invokes the adapter, checks that its reported key ID matches the operation's shift binding, computes SHA-256 over the exact returned bytes, and transitions the operation to `SIGNED`.
+- The service returns the same signed bytes whose SHA-256 was recorded. The caller must use those exact bytes when building the gRPC `Check`; reserializing or modifying them afterward will cause the submission hash check to fail.
+- The signer contract deliberately does not prescribe the MAC, previous-document hash representation, or QES/CMS/XMLDSig container. No concrete signer implementation is registered yet, and Spring only creates the service if both PRRO is enabled and a signer adapter bean exists.
+- The adapter must derive its reported key ID from the certificate/key actually used, not echo a configured string. This is an explicit trust boundary and will need provider-specific verification tests.
+
+This orchestration layer does not create the signing input, calculate the previous-document hash, add a MAC, or transmit to DPS. It is infrastructure for connecting those parts after the official payload contract is verified.
+
 ## Remaining signing/hash-chain boundary
 The separate PRRO gRPC API description says `Check.check_sign` must carry a signed XML document and that each Check XML (except connection ping) includes the hash of the preceding Check XML. The supplied information-transfer document describes `MAC` as a Base64 value calculated for `DAT`, but the reviewed passages do not define the cryptographic MAC algorithm or fully specify how the gRPC API's previous-document hash is encoded together with the QES-signed payload. These are not interchangeable assumptions.
 
@@ -76,4 +86,4 @@ Therefore `PrroXmlDocumentBuilder` and `PrroXmlCanonicalizer` are not connected 
 - Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
-Confirm the API's exact signed-payload / QES container and previous-Check hash encoding against an official fixture or a DPS-provided test vector. Then implement a signer adapter that verifies its certificate key identifier matches the active shift binding, implement the previous-document hash chain behind a separate interface, add fixture-based tests, and only afterward connect the generated XML to submission orchestration.
+Obtain an official fixture or a DPS-provided test vector that specifies the exact signed payload, previous-Check hash encoding, and any MAC requirements. Then implement the provider-specific signer and previous-document hash-chain adapters, test the complete signed bytes against the fixture, and only afterward connect XML generation to submission orchestration.
