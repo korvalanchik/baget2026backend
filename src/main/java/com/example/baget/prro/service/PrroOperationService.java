@@ -33,7 +33,8 @@ public class PrroOperationService {
         Operation existing = findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
         if (existing != null) {
             if (!existing.requestHash().equalsIgnoreCase(command.requestHash())
-                    || !existing.shiftKey().equals(command.shiftKey())) {
+                    || !existing.shiftKey().equals(command.shiftKey())
+                    || !Objects.equals(existing.signerKeyId(), command.signerKeyId())) {
                 throw new IdempotencyConflictException(
                         "Idempotency key was already used for a different request");
             }
@@ -44,12 +45,13 @@ public class PrroOperationService {
         jdbcTemplate.update("""
                 INSERT INTO prro_operations
                     (device_id, shift_key, idempotency_key, request_hash, source_type, source_reference,
-                     document_type, local_number, status, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', ?)
+                     document_type, local_number, signer_key_id, status, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', ?)
                 """,
                 command.deviceId(), command.shiftKey(), command.idempotencyKey(),
                 command.requestHash().toLowerCase(Locale.ROOT), command.sourceType(),
-                command.sourceReference(), command.documentType(), localNumber, command.createdBy());
+                command.sourceReference(), command.documentType(), localNumber,
+                command.signerKeyId(), command.createdBy());
 
         return findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
     }
@@ -85,13 +87,15 @@ public class PrroOperationService {
 
         if (before.sourceType().equals("SHIFT_OPEN") && next == Status.REJECTED) {
             jdbcTemplate.update("""
-                    UPDATE prro_devices SET active_shift_key = NULL
+                    UPDATE prro_devices
+                       SET active_shift_key = NULL, active_signer_key_id = NULL
                      WHERE id = ? AND active_shift_key = ?
                     """, before.deviceId(), before.shiftKey());
         }
         if (before.sourceType().equals("SHIFT_CLOSE") && next == Status.FISCALIZED) {
             jdbcTemplate.update("""
-                    UPDATE prro_devices SET active_shift_key = NULL
+                    UPDATE prro_devices
+                       SET active_shift_key = NULL, active_signer_key_id = NULL
                      WHERE id = ? AND active_shift_key = ?
                     """, before.deviceId(), before.shiftKey());
         }
@@ -106,7 +110,8 @@ public class PrroOperationService {
     private Device lockDevice(long deviceId) {
         try {
             return jdbcTemplate.queryForObject("""
-                    SELECT id, environment, enabled, active_shift_key, next_local_number
+                    SELECT id, environment, enabled, active_shift_key, active_signer_key_id,
+                           next_local_number
                       FROM prro_devices
                      WHERE id = ?
                      FOR UPDATE
@@ -115,6 +120,7 @@ public class PrroOperationService {
                     rs.getString("environment"),
                     rs.getBoolean("enabled"),
                     rs.getString("active_shift_key"),
+                    rs.getString("active_signer_key_id"),
                     rs.getInt("next_local_number")), deviceId);
         } catch (EmptyResultDataAccessException ex) {
             throw new IllegalArgumentException("PRRO device not found: " + deviceId, ex);
@@ -132,14 +138,22 @@ public class PrroOperationService {
             }
             jdbcTemplate.update("""
                     UPDATE prro_devices
-                       SET active_shift_key = ?
+                       SET active_shift_key = ?, active_signer_key_id = ?
                      WHERE id = ? AND active_shift_key IS NULL
-                    """, command.shiftKey(), device.id());
+                    """, command.shiftKey(), command.signerKeyId(), device.id());
             return 0;
         }
 
         if (device.activeShiftKey() == null || !device.activeShiftKey().equals(command.shiftKey())) {
             throw new IllegalStateException("The requested PRRO shift is not active");
+        }
+        if (device.activeSignerKeyId() == null || device.activeSignerKeyId().isBlank()) {
+            throw new IllegalStateException(
+                    "The active PRRO shift has no recorded signer; reconcile the shift before preparing documents");
+        }
+        if (!device.activeSignerKeyId().equals(command.signerKeyId())) {
+            throw new IllegalStateException(
+                    "All documents in an active PRRO shift must use the same signer key");
         }
 
         int localNumber = device.nextLocalNumber();
@@ -155,7 +169,7 @@ public class PrroOperationService {
         try {
             return jdbcTemplate.queryForObject("""
                     SELECT id, device_id, shift_key, idempotency_key, request_hash, source_type,
-                           source_reference, document_type, local_number, status,
+                           source_reference, document_type, local_number, signer_key_id, status,
                            signed_document_hash, fiscal_document_id, response_code,
                            response_message, created_by
                       FROM prro_operations
@@ -170,7 +184,7 @@ public class PrroOperationService {
         try {
             return jdbcTemplate.queryForObject("""
                     SELECT id, device_id, shift_key, idempotency_key, request_hash, source_type,
-                           source_reference, document_type, local_number, status,
+                           source_reference, document_type, local_number, signer_key_id, status,
                            signed_document_hash, fiscal_document_id, response_code,
                            response_message, created_by
                       FROM prro_operations
@@ -189,6 +203,7 @@ public class PrroOperationService {
         requireText(command.sourceType(), "sourceType", 24);
         requireText(command.documentType(), "documentType", 24);
         requireText(command.createdBy(), "createdBy", 150);
+        requireText(command.signerKeyId(), "signerKeyId", 128);
         if (!SHA_256.matcher(command.requestHash()).matches()) {
             throw new IllegalArgumentException("requestHash must be a SHA-256 hex string");
         }
@@ -243,17 +258,38 @@ public class PrroOperationService {
     }
 
     private record Device(long id, String environment, boolean enabled, String activeShiftKey,
-                          int nextLocalNumber) {}
+                          String activeSignerKeyId, int nextLocalNumber) {}
 
     public record PrepareOperation(long deviceId, String shiftKey, String idempotencyKey,
                                    String requestHash, String sourceType, String sourceReference,
-                                   String documentType, String createdBy) {}
+                                   String documentType, String createdBy, String signerKeyId) {
+        public PrepareOperation(long deviceId, String shiftKey, String idempotencyKey,
+                                String requestHash, String sourceType, String sourceReference,
+                                String documentType, String createdBy) {
+            this(deviceId, shiftKey, idempotencyKey, requestHash, sourceType, sourceReference,
+                    documentType, createdBy, null);
+        }
+
+        public PrepareOperation {
+            signerKeyId = signerKeyId == null ? null : signerKeyId.trim();
+        }
+    }
 
     public record Operation(long id, long deviceId, String shiftKey, String idempotencyKey,
                             String requestHash, String sourceType, String sourceReference,
-                            String documentType, int localNumber, Status status,
+                            String documentType, int localNumber, String signerKeyId, Status status,
                             String signedDocumentHash, String fiscalDocumentId,
-                            Integer responseCode, String responseMessage, String createdBy) {}
+                            Integer responseCode, String responseMessage, String createdBy) {
+        public Operation(long id, long deviceId, String shiftKey, String idempotencyKey,
+                         String requestHash, String sourceType, String sourceReference,
+                         String documentType, int localNumber, Status status,
+                         String signedDocumentHash, String fiscalDocumentId,
+                         Integer responseCode, String responseMessage, String createdBy) {
+            this(id, deviceId, shiftKey, idempotencyKey, requestHash, sourceType, sourceReference,
+                    documentType, localNumber, null, status, signedDocumentHash, fiscalDocumentId,
+                    responseCode, responseMessage, createdBy);
+        }
+    }
 
     public enum Status {
         PREPARED, SIGNED, SENDING, FISCALIZED, REJECTED, UNKNOWN_RESULT
@@ -280,6 +316,7 @@ public class PrroOperationService {
                 rs.getString("source_reference"),
                 rs.getString("document_type"),
                 rs.getInt("local_number"),
+                rs.getString("signer_key_id"),
                 Status.valueOf(rs.getString("status")),
                 rs.getString("signed_document_hash"),
                 rs.getString("fiscal_document_id"),
