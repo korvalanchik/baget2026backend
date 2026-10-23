@@ -24,6 +24,19 @@ Official sources:
 - State transitions are explicit. An ambiguous network result is `UNKNOWN_RESULT` and must be reconciled before any further submission.
 - A shift close only clears the active shift after a confirmed fiscalized response. A rejected shift opening clears the prepared active-shift marker; an ambiguous result keeps it for reconciliation.
 
+## XML protocol and canonicalization (version 2.2.3, revision 3.1)
+
+The reviewed protocol document is dated 18 February 2025. For general-purpose receipt packets it describes a `DAT` element containing a `C` receipt, a packet timestamp `TS`, and receipt operations such as `P` (sale item), `M` (payment), and `E` (receipt closing). A Z-report uses a `Z` element within `DAT`. The protocol represents monetary values in minor units (amount in UAH multiplied by 100) and quantities in thousandths (quantity multiplied by 1000).
+
+Appendix A documents canonicalization rules: remove formatting whitespace between tags, expand empty elements to explicit opening/closing tags, normalize spacing in tag syntax, and sort attributes alphabetically. `PrroXmlCanonicalizer` implements these representation-level transformations and is tested against the Appendix A receipt example.
+- Ambiguity to resolve before signing: rule 3's prose mentions whitespace in start-tags, while its example also normalizes runs of spaces/tabs in text content. The current utility follows the example; this behavior remains isolated and must be confirmed before it is used to produce signed XML.
+
+### Remaining signing/hash-chain boundary
+
+The separate PRRO gRPC API description says `Check.check_sign` must carry a signed XML document and that each Check XML (except connection ping) includes the hash of the preceding Check XML. The supplied information-transfer document describes `MAC` as a Base64 value calculated for `DAT`, but the reviewed passages do not define the cryptographic MAC algorithm or fully specify how the gRPC API's previous-document hash is encoded together with the QES-signed payload. These are not interchangeable assumptions.
+
+Therefore the canonicalizer is not yet connected to `PrroSubmissionService`: it does not create a MAC, hash-chain field, or QES signature and does not send documents to DPS. Those steps must follow an explicitly verified API/signature contract and fixture tests.
+
 ## Submission orchestration
 - `PrroSubmissionService` accepts only an already signed protocol document; it does not construct XML or perform QES signing.
 - Before transmission it verifies that the operation is in `SIGNED`, the local number and document type match, and the SHA-256 hash of `check_sign` matches the stored signed-document hash.
