@@ -40,6 +40,17 @@ class PrroOperationServiceTest {
     }
 
     @Test
+    void permitsOnlyTheSignerBoundToTheActiveShift() {
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+                () -> PrroOperationService.validateActiveSignerKey("operator-key-1", "operator-key-1"));
+
+        assertThrows(IllegalStateException.class,
+                () -> PrroOperationService.validateActiveSignerKey("operator-key-1", "operator-key-2"));
+        assertThrows(IllegalStateException.class,
+                () -> PrroOperationService.validateActiveSignerKey(null, "operator-key-1"));
+    }
+
+    @Test
     void rejectsIllegalStateTransitionBeforeAccessingDatabase() {
         assertThrows(IllegalArgumentException.class,
                 () -> service.transition(10L,
