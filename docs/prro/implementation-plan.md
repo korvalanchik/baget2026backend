@@ -11,6 +11,7 @@ Official sources:
 ## Foundation
 - gRPC/proto3 contract and generated Java stubs are configured in Gradle.
 - The transport client is isolated from fiscal business logic.
+- Every gRPC call uses a configurable deadline (`BAGET_PRRO_RPC_DEADLINE_MILLIS`, default 15000 ms). A submission timeout is treated as an ambiguous outcome by `PrroSubmissionService` and must be reconciled before any retry.
 - The default endpoint is the DPS developer endpoint and PRRO is disabled by default.
 
 ## Operation persistence (V94)

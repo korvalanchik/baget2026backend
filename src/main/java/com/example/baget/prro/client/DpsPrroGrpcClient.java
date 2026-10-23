@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Thin transport adapter for the official DPS gRPC API.
@@ -25,36 +26,47 @@ import java.util.Objects;
 public class DpsPrroGrpcClient {
 
     private final ChkIncomeServiceGrpc.ChkIncomeServiceBlockingStub stub;
+    private final long rpcDeadlineMillis;
 
-    public DpsPrroGrpcClient(ChkIncomeServiceGrpc.ChkIncomeServiceBlockingStub stub) {
+    public DpsPrroGrpcClient(ChkIncomeServiceGrpc.ChkIncomeServiceBlockingStub stub,
+                             com.example.baget.prro.config.PrroProperties properties) {
         this.stub = Objects.requireNonNull(stub, "stub");
+        Objects.requireNonNull(properties, "properties");
+        if (properties.getRpcDeadlineMillis() <= 0) {
+            throw new IllegalArgumentException("PRRO RPC deadline must be positive");
+        }
+        this.rpcDeadlineMillis = properties.getRpcDeadlineMillis();
+    }
+
+    private ChkIncomeServiceGrpc.ChkIncomeServiceBlockingStub withDeadline() {
+        return stub.withDeadlineAfter(rpcDeadlineMillis, TimeUnit.MILLISECONDS);
     }
 
     public CheckResponse sendCheckV2(Check check) {
-        return stub.sendChkV2(Objects.requireNonNull(check, "check"));
+        return withDeadline().sendChkV2(Objects.requireNonNull(check, "check"));
     }
 
     public CheckResponse ping(Check check) {
-        return stub.ping(Objects.requireNonNull(check, "check"));
+        return withDeadline().ping(Objects.requireNonNull(check, "check"));
     }
 
     public CheckResponse getLastCheck(CheckRequest request) {
-        return stub.lastChk(Objects.requireNonNull(request, "request"));
+        return withDeadline().lastChk(Objects.requireNonNull(request, "request"));
     }
 
     public CheckResponse deleteLastCheck(CheckRequest request) {
-        return stub.delLastChk(Objects.requireNonNull(request, "request"));
+        return withDeadline().delLastChk(Objects.requireNonNull(request, "request"));
     }
 
     public CheckResponse deleteLastCheckById(CheckRequestId request) {
-        return stub.delLastChkId(Objects.requireNonNull(request, "request"));
+        return withDeadline().delLastChkId(Objects.requireNonNull(request, "request"));
     }
 
     public StatusResponse getRroStatus(CheckRequest request) {
-        return stub.statusRro(Objects.requireNonNull(request, "request"));
+        return withDeadline().statusRro(Objects.requireNonNull(request, "request"));
     }
 
     public RroInfoResponse getRroInfo(CheckRequest request) {
-        return stub.infoRro(Objects.requireNonNull(request, "request"));
+        return withDeadline().infoRro(Objects.requireNonNull(request, "request"));
     }
 }
