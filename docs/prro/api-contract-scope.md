@@ -39,7 +39,7 @@ Do not implement these using guesses or by substituting a generic XAdES/CAdES/PA
 1. The precise MAC algorithm and input bytes, if required for the selected Electronic Cabinet XML protocol.
 2. The exact encoding, placement, and chaining rule for the previous-Check XML hash.
 3. The exact QES signed-document representation expected in `Check.check_sign`, including any required envelope and timestamp behavior.
-4. The exact source of the signer `publicKeyId) to compare against the operator identity reported by DPS.
+4. The exact source of the signer `publicKeyId` to compare against the operator identity reported by DPS.
 
 The reviewed source pages establish that signed XML is submitted, the previous-Check hash is relevant, and the shift is constrained to one signer (with a documented senior-cashier exception for shift closing). They do not alone provide a complete reproducible cryptographic test vector for the full submission payload.
 
