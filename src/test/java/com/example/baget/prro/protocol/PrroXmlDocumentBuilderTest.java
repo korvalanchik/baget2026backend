@@ -130,6 +130,40 @@ class PrroXmlDocumentBuilderTest {
         assertThrows(IllegalArgumentException.class, () -> builder.buildCheck(document));
     }
 
+    @Test
+    void buildsReturnCheckWithMultipleTaxGroupsOnClosingElement() {
+        var document = new PrroXmlDocumentBuilder.CheckDocument(
+                header("1234567890", "TN", "SERIAL", 2),
+                PrroXmlDocumentBuilder.ReceiptType.RETURN,
+                List.of(
+                        new PrroXmlDocumentBuilder.SaleItem(
+                                1, "A", "Товар A", new BigDecimal("5.00"),
+                                null, null, "1", null),
+                        new PrroXmlDocumentBuilder.SaleItem(
+                                2, "B", "Товар B", new BigDecimal("5.00"),
+                                null, null, "2", null)),
+                List.of(new PrroXmlDocumentBuilder.Payment(
+                        3, PrroXmlDocumentBuilder.PaymentType.CASH, null, new BigDecimal("10.00"))),
+                new PrroXmlDocumentBuilder.ReceiptClosing(
+                        4, 2, new BigDecimal("10.00"), null, null,
+                        List.of(
+                                new PrroXmlDocumentBuilder.TaxBreakdown(
+                                        "1", new BigDecimal("20.00"), new BigDecimal("0.83"),
+                                        null, null, 0, 0),
+                                new PrroXmlDocumentBuilder.TaxBreakdown(
+                                        "2", new BigDecimal("5.00"), new BigDecimal("0.24"),
+                                        null, null, 0, 0))));
+
+        String xml = builder.buildCheck(document);
+
+        assertTrue(xml.contains("<C T=\"1\">"));
+        assertTrue(xml.contains("<TX DTPR") || xml.contains("<TX TX="));
+        assertTrue(xml.contains("TX=\"1\""));
+        assertTrue(xml.contains("TX=\"2\""));
+        assertTrue(xml.contains("</TX></E>"));
+        assertTrue(!xml.matches("(?s).*<E[^>]*\\sTX=\"[^\"]+\".*"));
+    }
+
     private static PrroXmlDocumentBuilder.PacketHeader header(
             String fiscalNumber, String taxpayerNumber, String serialNumber, long packetId) {
         return new PrroXmlDocumentBuilder.PacketHeader(
