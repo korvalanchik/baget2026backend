@@ -31,11 +31,18 @@ The reviewed protocol document is dated 18 February 2025. For general-purpose re
 Appendix A documents canonicalization rules: remove formatting whitespace between tags, expand empty elements to explicit opening/closing tags, normalize spacing in tag syntax, and sort attributes alphabetically. `PrroXmlCanonicalizer` implements these representation-level transformations and is tested against the Appendix A receipt example.
 - Ambiguity to resolve before signing: rule 3's prose mentions whitespace in start-tags, while its example also normalizes runs of spaces/tabs in text content. The current utility follows the example; this behavior remains isolated and must be confirmed before it is used to produce signed XML.
 
-### Remaining signing/hash-chain boundary
+## XML document builder
+- `PrroXmlDocumentBuilder` creates canonical, unsigned `DAT` XML payloads for general-purpose sale/return checks (`CHK`) and Z-reports (`ZREPORT`).
+- CHK support currently includes `C`, `P`, `M`, `E`, packet `TS`, single-tax closing attributes, and multiple-tax child `TX` elements. ZREPORT support includes `Z`, `TXS`, payment turnover `M`, cash movement `IO`, check counts `NC`, and packet `TS`.
+- The input API uses `BigDecimal` values in UAH and natural quantity units. The builder converts money to integer kopecks and quantity to thousandths without rounding; values exceeding the protocol precision are rejected.
+- The builder supports only the general-purpose device format (`DT=0`, `V=1`). Specialized RRO formats and less-common receipt operations are intentionally not implemented yet.
+- The caller must provide a unique packet identifier `DI` for each PRRO and the fiscal receipt number `NO` separately. These are not inferred from the internal operation local number.
+- The output is a canonical, unsigned `DAT` element only. It does not include a `MAC` sibling and is not a complete signed document for `Check.check_sign`; do not send it directly to DPS.
 
+## Remaining signing/hash-chain boundary
 The separate PRRO gRPC API description says `Check.check_sign` must carry a signed XML document and that each Check XML (except connection ping) includes the hash of the preceding Check XML. The supplied information-transfer document describes `MAC` as a Base64 value calculated for `DAT`, but the reviewed passages do not define the cryptographic MAC algorithm or fully specify how the gRPC API's previous-document hash is encoded together with the QES-signed payload. These are not interchangeable assumptions.
 
-Therefore the canonicalizer is not yet connected to `PrroSubmissionService`: it does not create a MAC, hash-chain field, or QES signature and does not send documents to DPS. Those steps must follow an explicitly verified API/signature contract and fixture tests.
+Therefore `PrroXmlDocumentBuilder` and `PrroXmlCanonicalizer` are not connected to `PrroSubmissionService`: neither creates a MAC, hash-chain field, QES signature, nor the final gRPC payload. Those steps must follow an explicitly verified API/signature contract and fixture tests.
 
 ## Submission orchestration
 - `PrroSubmissionService` accepts only an already signed protocol document; it does not construct XML or perform QES signing.
@@ -50,11 +57,11 @@ Therefore the canonicalizer is not yet connected to `PrroSubmissionService`: it 
 
 ## Security and production blockers
 - The module does not store private keys or sign XML yet.
-- XML structure, document hash chaining, date-time rules, and QES signature encoding must be implemented only after reviewing the complete current official XML protocol.
+- XML structure for additional receipt operations, document hash chaining, date-time rules, and QES signature encoding must be implemented only after reviewing the complete current official XML protocol and API signing contract.
 - Never retry a timed-out submission blindly. Use DPS status / last-check reconciliation.
 - Production endpoint selection must remain an explicit deployment decision, not a client-controlled field.
 - Branch authorization and authenticated cashier identity must be wired into protected API endpoints before enabling UI actions.
 - Test receipts sent to `cabinet.tax.gov.ua:9443` are not fiscal receipts.
 
 ## Next implementation step
-Review the complete current official protocol and published examples before implementing XML generation, previous-document hash chaining, and QES signing. Then add protocol-fixture tests and a test-server integration test.
+Confirm the API's exact signed-payload / QES container and previous-Check hash encoding against an official fixture or a DPS-provided test vector. Then implement the signing/hash-chain layer behind a separate interface, add fixture-based tests, and only afterward connect the generated XML to submission orchestration.
