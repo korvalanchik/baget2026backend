@@ -12,6 +12,7 @@ public class PrroProperties {
     private int port = 9443;
     private boolean tlsEnabled = true;
     private boolean enabled = false;
+    private long rpcDeadlineMillis = 15_000;
 
     public String getHost() {
         return host;
@@ -35,6 +36,14 @@ public class PrroProperties {
 
     public void setTlsEnabled(boolean tlsEnabled) {
         this.tlsEnabled = tlsEnabled;
+    }
+
+    public long getRpcDeadlineMillis() {
+        return rpcDeadlineMillis;
+    }
+
+    public void setRpcDeadlineMillis(long rpcDeadlineMillis) {
+        this.rpcDeadlineMillis = rpcDeadlineMillis;
     }
 
     public boolean isEnabled() {
