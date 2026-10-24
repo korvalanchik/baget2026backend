@@ -17,6 +17,12 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CodingErrorAction;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -59,6 +65,39 @@ public final class PrroXmlCanonicalizer {
         StringBuilder result = new StringBuilder(xml.length());
         appendElement(root, result);
         return result.toString();
+    }
+
+    /**
+     * Canonicalizes a packet and encodes its bytes using Windows-1251.
+     *
+     * <p>The protocol's XML examples declare Windows-1251. This method makes
+     * the character encoding explicit for protocol-level MAC/hash test vectors;
+     * it does not calculate a MAC, add a previous-document hash, create a QES
+     * signature, or build the final gRPC {@code Check.check_sign} payload.</p>
+     *
+     * <p>Characters that cannot be represented in Windows-1251 are rejected
+     * instead of being silently replaced, because replacement would change the
+     * bytes used by any later cryptographic operation.</p>
+     *
+     * @param xml an XML packet, for example a {@code DAT} packet
+     * @return canonical packet bytes encoded as Windows-1251, without an XML declaration
+     * @throws IllegalArgumentException if the XML is invalid or contains
+     *                                  characters not representable in Windows-1251
+     */
+    public byte[] canonicalizeToWindows1251(String xml) {
+        String canonical = canonicalize(xml);
+        CharsetEncoder encoder = Charset.forName("windows-1251").newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            ByteBuffer encoded = encoder.encode(CharBuffer.wrap(canonical));
+            byte[] bytes = new byte[encoded.remaining()];
+            encoded.get(bytes);
+            return bytes;
+        } catch (CharacterCodingException ex) {
+            throw new IllegalArgumentException(
+                    "Canonical PRRO XML contains characters not representable in Windows-1251", ex);
+        }
     }
 
     private static Document parseDocument(String xml) {
