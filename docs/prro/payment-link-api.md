@@ -1,21 +1,22 @@
 # PRRO payment-link API (first backend increment)
 
-This increment binds a previously recorded incoming Baget payment to at most one local PRRO operation.
+This increment binds one saved Baget payment request to at most one local PRRO operation. The key is the idempotent `customer_payment_requests.request_key`, not an individual `customer_transactions.id`: one real payment can be split into a `PAYMENT` row and an `ADVANCE` row when an invoice is overpaid.
 
 ## Endpoints
 
-- `GET /api/prro/payments/{transactionId}?branchNo={branchNo}` — returns the operation state or `NOT_PREPARED`.
-- `POST /api/prro/payments/{transactionId}/prepare` with JSON `{"branchNo": 1}` — creates the local `PREPARED` operation or returns the already-linked operation.
+- `GET /api/prro/payments/{paymentRequestKey}?branchNo={branchNo}` — returns the operation state or `NOT_PREPARED`.
+- `POST /api/prro/payments/{paymentRequestKey}/prepare` with JSON `{"branchNo": 1}` — creates the local `PREPARED` operation or returns the already-linked operation.
 
 Both endpoints require an authenticated user permitted to accept payments and access to the customer and branch.
 
 ## Eligibility rules
 
-- The source must be an active `customer_transactions` row of type `PAYMENT` or `ADVANCE`, with a positive amount.
-- The transaction must have an incoming ledger entry tied to a configured cash account.
-- The request branch must match the transaction branch.
+- The key must refer to a saved payment request in the requested branch.
+- The request's actual new-money `amount` must be positive. A request that only allocates previously received advance money is rejected.
+- The saved result must contain one or more active `PAYMENT` / `ADVANCE` transactions. Their total and their incoming ledger-entry total must equal the actual new-money amount in the request.
+- The incoming ledger entries must point to one cash account. The payment request is the fiscalization unit, so split ledger rows for a single real payment do not create separate receipts.
 - Exactly one enabled PRRO device must be configured for that branch, and it must have an active shift with a recorded signer key identifier.
-- `prro_payment_operation_links` uses the customer transaction ID as its primary key, so a payment cannot be linked to multiple PRRO operations. The transaction row is locked before the link is checked/created.
+- `prro_payment_operation_links` uses the payment request key as its primary key, preventing the same payment request from being linked to multiple PRRO operations.
 
 An `ADVANCE_ALLOCATION` transaction is deliberately excluded: applying previously received advance money is not a new incoming payment and must not create another receipt.
 
