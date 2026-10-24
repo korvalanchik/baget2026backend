@@ -68,6 +68,10 @@ public class PrroOperationService {
         }
 
         Operation before = findById(operationId);
+        if (next == Status.SENDING) {
+            ensureSubmissionOrder(before);
+        }
+
         int changed = jdbcTemplate.update("""
                 UPDATE prro_operations
                    SET status = ?,
@@ -100,6 +104,65 @@ public class PrroOperationService {
                     """, before.deviceId(), before.shiftKey());
         }
         return findById(operationId);
+    }
+
+    /**
+     * Prevents overlapping or out-of-order submissions for a single PRRO device.
+     *
+     * <p>The device row lock serializes competing send attempts across application
+     * instances. The locking read of active operations observes current database
+     * state even if an earlier read in this transaction established a repeatable-read
+     * snapshot.</p>
+     */
+    private void ensureSubmissionOrder(Operation candidate) {
+        lockDevice(candidate.deviceId());
+
+        var pending = jdbcTemplate.query("""
+                SELECT id, local_number, status
+                  FROM prro_operations
+                 WHERE device_id = ?
+                   AND status IN ('PREPARED', 'SIGNED', 'SENDING', 'UNKNOWN_RESULT')
+                 ORDER BY local_number, id
+                 FOR UPDATE
+                """, (rs, rowNum) -> new PendingSubmission(
+                rs.getLong("id"),
+                rs.getInt("local_number"),
+                Status.valueOf(rs.getString("status"))), candidate.deviceId());
+
+        validateSubmissionOrder(candidate, pending);
+    }
+
+    static void validateSubmissionOrder(Operation candidate, java.util.List<PendingSubmission> pending) {
+        Objects.requireNonNull(candidate, "candidate");
+        Objects.requireNonNull(pending, "pending");
+
+        for (PendingSubmission other : pending) {
+            if (other.operationId() == candidate.id()) {
+                continue;
+            }
+            if (other.status() == Status.SENDING || other.status() == Status.UNKNOWN_RESULT) {
+                throw new SubmissionOrderConflictException(
+                        "PRRO device has an unresolved submission " + other.operationId()
+                                + "; reconcile it before sending another document");
+            }
+            if (other.localNumber() < candidate.localNumber()) {
+                throw new SubmissionOrderConflictException(
+                        "Earlier PRRO local number " + other.localNumber()
+                                + " must be finalized before local number " + candidate.localNumber());
+            }
+        }
+    }
+
+    record PendingSubmission(long operationId, int localNumber, Status status) {
+        PendingSubmission {
+            Objects.requireNonNull(status, "status");
+        }
+    }
+
+    public static class SubmissionOrderConflictException extends RuntimeException {
+        public SubmissionOrderConflictException(String message) {
+            super(message);
+        }
     }
 
     @Transactional(readOnly = true)
