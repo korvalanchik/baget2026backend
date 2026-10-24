@@ -43,6 +43,8 @@ The reviewed protocol document is dated 18 February 2025. For general-purpose re
 Appendix A documents canonicalization rules: remove formatting whitespace between tags, expand empty elements to explicit opening/closing tags, normalize spacing in tag syntax, and sort attributes alphabetically. `PrroXmlCanonicalizer` implements these representation-level transformations and is tested against the Appendix A receipt example.
 - Ambiguity to resolve before signing: rule 3's prose mentions whitespace in start-tags, while its example also normalizes runs of spaces/tabs in text content. The current utility follows the example; this behavior remains isolated and must be confirmed before it is used to produce signed XML.
 
+- The protocol's XML examples declare `windows-1251`. `PrroXmlCanonicalizer.canonicalizeToWindows1251` now exposes the canonical root element as explicit Windows-1251 bytes and rejects unrepresentable characters rather than substituting replacement bytes. This is a byte-encoding utility for deterministic protocol tests only; it does not establish that those bytes alone are the final `Check.check_sign` payload, nor does it calculate MAC, a previous-Check hash, or QES.
+
 ## XML document builder
 - `PrroXmlDocumentBuilder` creates canonical, unsigned `DAT` XML payloads for general-purpose sale/return checks (`CHK`) and Z-reports (`ZREPORT`).
 - CHK support currently includes `C`, `P`, `M`, `E`, packet `TS`, single-tax closing attributes, and multiple-tax child `TX` elements. ZREPORT support includes `Z`, `TXS`, payment turnover `M`, cash movement `IO`, check counts `NC`, and packet `TS`.
