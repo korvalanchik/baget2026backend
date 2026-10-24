@@ -74,6 +74,7 @@ Therefore `PrroXmlDocumentBuilder` and `PrroXmlCanonicalizer` are not connected 
 
 ## Unknown-result inspection
 - `PrroUnknownResultInspectionService` performs read-only `statusRro` and `lastChk` queries for an operation in `UNKNOWN_RESULT`.
+- Before transitioning an operation to `SENDING`, `PrroOperationService` locks the PRRO device row and performs a locking read of active operations. A prior local number in `PREPARED`/`SIGNED` blocks newer sends; any `SENDING` or `UNKNOWN_RESULT` operation blocks all additional sends for that device until it is reconciled. This protects the per-device document chain from concurrent/out-of-order submission across application instances. It does not calculate the protocol's previous-document hash.
 - The caller must supply a signed `CheckRequest`; this module does not keep the PRRO private key.
 - Inspection results are evidence for reconciliation, not an automatic decision. A last-check result by itself does not prove that the target local operation was accepted, so the service does not mutate operation state or retry submissions.
 
