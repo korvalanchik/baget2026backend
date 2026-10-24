@@ -2,13 +2,15 @@ package com.example.baget.prro;
 
 import com.example.baget.prro.service.PrroPaymentOperationService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Protected endpoints for binding an already-recorded Baget incoming payment
- * to one local PRRO operation. These endpoints do not send documents to DPS.
+ * Protected endpoints for binding a saved Baget payment request to one local
+ * PRRO operation. These endpoints do not send documents to DPS.
  */
 @RestController
 @RequestMapping("/api/prro/payments")
@@ -19,20 +21,20 @@ public class PrroPaymentOperationController {
         this.service = service;
     }
 
-    @GetMapping("/{transactionId}")
+    @GetMapping("/{paymentRequestKey}")
     public PrroPaymentOperationService.PaymentOperationView status(
-            @PathVariable @Positive long transactionId,
+            @PathVariable @NotBlank @Size(max = 36) String paymentRequestKey,
             @RequestParam @Positive long branchNo,
             Authentication authentication) {
-        return service.status(transactionId, branchNo, authentication);
+        return service.status(paymentRequestKey, branchNo, authentication);
     }
 
-    @PostMapping("/{transactionId}/prepare")
+    @PostMapping("/{paymentRequestKey}/prepare")
     public PrroPaymentOperationService.PaymentOperationView prepare(
-            @PathVariable @Positive long transactionId,
+            @PathVariable @NotBlank @Size(max = 36) String paymentRequestKey,
             @Valid @RequestBody PrepareRequest request,
             Authentication authentication) {
-        return service.prepare(transactionId, request.branchNo(), authentication);
+        return service.prepare(paymentRequestKey, request.branchNo(), authentication);
     }
 
     public record PrepareRequest(@Positive long branchNo) {}
