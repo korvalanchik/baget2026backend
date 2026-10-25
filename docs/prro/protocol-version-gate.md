@@ -1,34 +1,35 @@
-# PRRO XML protocol version gate
+# PRRO XML protocol version decision
 
 ## Decision
 
-The selected transport is the DPS Electronic Cabinet gRPC/proto3 API:
-https://cabinet.tax.gov.ua/help/api.html
+The implementation target agreed for Baget is the DPS Electronic Cabinet fiscal-server API documentation version **25.02.2025** and its linked XML check/Z-report transfer protocol:
 
-That API page explicitly links the XML check/Z-report protocol **2.1.7**:
-https://tax.gov.ua/data/material/000/311/399207/SZZD_RRO_Protokol_peredach_nformats_2_1_7.doc
+- API and protocol index: https://tax.gov.ua/baneryi/programni-rro/opis-ari-fiskalnogo-servera/opis-ari-elektronniy-kabinet/
+- XML check/Z-report protocol: https://tax.gov.ua/data/files/530962.docx
+- API description: https://tax.gov.ua/data/files/262576.docx
 
-The current prototype's `PrroXmlDocumentBuilder` and `PrroXmlCanonicalizer` were developed from a different reviewed document, **2.2.3, revision 3.1**, dated 18 February 2025:
-https://tax.gov.ua/data/files/530962.docx
+The selected transport remains the Electronic Cabinet gRPC/proto3 API, using `sendChkV2`. The XML builder/canonicalizer prototype was developed from the linked XML document identified in the implementation notes as version **2.2.3, revision 3.1**, dated 18 February 2025.
 
-The available sources do not establish that 2.2.3/revision 3.1 supersedes or is compatible with the version linked by the selected gRPC API. This is an unresolved compatibility blocker, not a cosmetic documentation difference.
+## Documentation discrepancy to keep visible
 
-## What is confirmed about the gRPC API
+The general API help page https://cabinet.tax.gov.ua/help/api.html also references the older XML protocol 2.1.7. That reference is recorded as a documentation discrepancy; it does **not** replace the explicit project decision to implement against the API documentation package dated 25.02.2025.
 
-The official API page specifies `sendChkV2`, with signed XML carried in `Check.check_sign`. It describes SHA-256 hexadecimal hashing of the preceding Check XML and says the first check's MAC is not populated. The developer endpoint `cabinet.tax.gov.ua:9443` does not issue fiscal receipts.
+Do not silently mix XML rules from protocol 2.1.7, the 25.02.2025 Electronic Cabinet package, or the separate Unified Window API. If a specific signing or payload rule is not explicit in the selected package, keep it marked unresolved and seek an authoritative fixture/clarification rather than guessing.
 
-These facts do not specify a complete reproducible signed-payload fixture or resolve the protocol-version mismatch.
+## Confirmed gRPC facts
+
+The Electronic Cabinet API describes `sendChkV2`, signed XML in `Check.check_sign`, and a previous-Check XML hash chain (except connection ping). The developer endpoint `cabinet.tax.gov.ua:9443` does not issue fiscal receipts.
+
+These transport facts alone do not define every byte of the signed payload, MAC algorithm, or the exact interaction between MAC, previous-Check hash, and QES. Those details must be verified against the selected 25.02.2025 documentation and an authoritative test vector.
 
 ## Required safeguards
 
-Until the version relationship is verified against an authoritative DPS specification or fixture:
-
-- Treat the existing `DAT` builder/canonicalizer as experimental protocol utilities.
-- Do not connect their output to `PrroSigningService` or `PrroSubmissionService`.
-- Do not enable a cashier-facing fiscalization action.
-- Do not infer that the separate Unified Window API, its `CHECK`/`ZREP` XML schemas, or CAdES-E-T examples define the gRPC `Check.check_sign` contract.
-- Keep the current no-blind-retry behavior for `UNKNOWN_RESULT`.
+- Treat the current `DAT` builder/canonicalizer as experimental until its output is verified against the selected protocol's complete rules and examples.
+- Do not connect unsigned builder output directly to `PrroSigningService` or `PrroSubmissionService`.
+- Do not enable the cashier-facing fiscalization action until signing and payload construction are verified end to end.
+- Do not infer that the separate Unified Window API, its `CHECK`/`ZREP` schemas, or CAdES-E-T examples define the gRPC `Check.check_sign` contract.
+- Keep the no-blind-retry behavior for `UNKNOWN_RESULT`.
 
 ## Next verification step
 
-Compare the API-linked 2.1.7 document with the reviewed 2.2.3/revision 3.1 document, recording differences in receipt/Z-report structure, MAC, encoding, canonicalization, and previous-Check hash handling. Then obtain or create tests from an authoritative fixture that fixes the exact bytes to hash and sign. Only after that should a concrete signing adapter be implemented.
+Use the 25.02.2025 API description and its linked XML protocol as the implementation baseline. Verify receipt/Z-report structure, MAC, encoding, canonicalization, and previous-Check hash handling against the full document and authoritative fixtures. Then implement the concrete signing/hash-chain adapter and test the exact bytes sent in `Check.check_sign`.
