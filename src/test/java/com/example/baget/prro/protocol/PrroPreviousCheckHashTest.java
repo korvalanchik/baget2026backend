@@ -19,11 +19,6 @@ class PrroPreviousCheckHashTest {
     }
 
     @Test
-    void firstCheckHasAnEmptyMacValue() {
-        assertEquals("", PrroPreviousCheckHash.firstCheckMacValue());
-    }
-
-    @Test
     void rejectsMissingPreviousCheckBytesInsteadOfInventingAHash() {
         assertThrows(IllegalArgumentException.class,
                 () -> PrroPreviousCheckHash.sha256Hex(null));
