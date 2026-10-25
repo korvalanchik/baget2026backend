@@ -13,8 +13,10 @@ import java.util.HexFormat;
  * should use an unsigned, canonical, or QES-signed representation: that input
  * must be the exact representation required by the verified DPS fixture.</p>
  *
- * <p>The first document in a shift has no previous-Check hash and therefore
- * uses an empty MAC value.</p>
+ * <p>This utility does not define the first-check MAC/XML-field behavior.
+ * Keep the API-level previous-Check hash rule separate from the XML protocol's
+ * {@code MAC} field until the selected protocol specification explicitly
+ * establishes their relationship.</p>
  */
 public final class PrroPreviousCheckHash {
 
@@ -33,7 +35,4 @@ public final class PrroPreviousCheckHash {
         }
     }
 
-    public static String firstCheckMacValue() {
-        return "";
-    }
 }
