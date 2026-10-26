@@ -6,6 +6,9 @@ WORKDIR /app
 
 COPY --chown=gradle:gradle . .
 
+# Ensure the Gradle user owns the working directory itself
+RUN chown -R gradle:gradle /app
+
 USER gradle
 
 RUN gradle --no-daemon bootJar -x test
