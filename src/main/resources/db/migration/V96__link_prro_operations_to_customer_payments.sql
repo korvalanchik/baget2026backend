@@ -1,5 +1,5 @@
 CREATE TABLE prro_payment_operation_links (
-    payment_request_key CHAR(36) NOT NULL PRIMARY KEY,
+    payment_request_key CHAR(36) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NOT NULL PRIMARY KEY,
     operation_id BIGINT NOT NULL,
     branch_no BIGINT NOT NULL,
     cash_account_id BIGINT NOT NULL,
