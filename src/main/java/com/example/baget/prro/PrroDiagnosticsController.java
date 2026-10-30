@@ -7,7 +7,6 @@ import com.programika.rro.ws.chk.RroInfoResponse;
 import com.programika.rro.ws.chk.StatusResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
@@ -66,7 +65,9 @@ public class PrroDiagnosticsController {
                         operator.getSenior(), operator.getIsname()))
                 .toList();
 
-        return new DiagnosticResponse(request.fiscalNumber(), info.getStatus().name(),
+        // DPS resolves the RRO from the signed payload. Do not echo a caller-
+        // supplied fiscal number as though it were confirmed by DPS.
+        return new DiagnosticResponse(info.getStatus().name(),
                 info.getStatusRro(), info.getOpenShift(), info.getOnline(),
                 info.getLastSigner(), info.getName(), info.getNameTo(), info.getAddr(),
                 info.getSingleTax(), info.getOfflineAllowed(), info.getAddNum(),
@@ -75,15 +76,11 @@ public class PrroDiagnosticsController {
                 status.getLastSigner(), status.getErrorMessage());
     }
 
-    public record InfoRequest(
-            @NotBlank @Pattern(regexp = "[0-9]{1,32}", message = "Фіскальний номер має містити лише цифри.")
-            String fiscalNumber,
-            @NotBlank @Size(max = 100_000) String signatureBase64) {}
+    public record InfoRequest(@NotBlank @Size(max = 100_000) String signatureBase64) {}
 
     public record OperatorView(String serial, int status, boolean senior, String name) {}
 
     public record DiagnosticResponse(
-            String fiscalNumber,
             String infoStatus,
             int statusRro,
             boolean openShift,
