@@ -28,7 +28,7 @@ class PrroDiagnosticsControllerTest {
         client = mock(DpsPrroGrpcClient.class);
         controller = new PrroDiagnosticsController(client);
         admin = mock(Authentication.class);
-        when(admin.getAuthorities()).thenReturn(List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        doReturn(List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))).when(admin).getAuthorities();
     }
 
     @Test
@@ -63,7 +63,7 @@ class PrroDiagnosticsControllerTest {
     @Test
     void refusesNonAdminBeforeCallingDps() {
         Authentication cashier = mock(Authentication.class);
-        when(cashier.getAuthorities()).thenReturn(List.of(new SimpleGrantedAuthority("ROLE_COUNTER")));
+        doReturn(List.of(new SimpleGrantedAuthority("ROLE_COUNTER"))).when(cashier).getAuthorities();
 
         assertThrows(ResponseStatusException.class, () -> controller.info(
                 new PrroDiagnosticsController.InfoRequest("4000318883", "c2lnbg=="), cashier));
