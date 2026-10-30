@@ -47,7 +47,7 @@ class PrroDiagnosticsControllerTest {
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(info);
         when(client.getRroStatus(any(CheckRequest.class))).thenReturn(status);
 
-        var result = controller.info(new PrroDiagnosticsController.InfoRequest("4000318883", base64), admin);
+        var result = controller.info(new PrroDiagnosticsController.InfoRequest(base64), admin);
 
         assertEquals("OK", result.infoStatus());
         assertEquals(1, result.statusRro());
@@ -66,7 +66,7 @@ class PrroDiagnosticsControllerTest {
         doReturn(List.of(new SimpleGrantedAuthority("ROLE_COUNTER"))).when(cashier).getAuthorities();
 
         assertThrows(ResponseStatusException.class, () -> controller.info(
-                new PrroDiagnosticsController.InfoRequest("4000318883", "c2lnbg=="), cashier));
+                new PrroDiagnosticsController.InfoRequest("c2lnbg=="), cashier));
         verifyNoInteractions(client);
     }
 }
