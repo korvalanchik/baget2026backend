@@ -1,6 +1,6 @@
 package com.example.baget.prro.service;
 
-import com.example.baget.finance.CustomerPaymentAccess;
+import com.example.baget.prro.PrroAccessService;
 import com.example.baget.prro.service.PrroOperationService.Operation;
 import com.example.baget.prro.service.PrroOperationService.PrepareOperation;
 import com.example.baget.users.User;
@@ -28,11 +28,11 @@ import java.util.Objects;
 @Service
 public class PrroPaymentOperationService {
     private final JdbcTemplate db;
-    private final CustomerPaymentAccess access;
+    private final PrroAccessService access;
     private final PrroOperationService operations;
     private final ObjectMapper json;
 
-    public PrroPaymentOperationService(JdbcTemplate db, CustomerPaymentAccess access,
+    public PrroPaymentOperationService(JdbcTemplate db, PrroAccessService access,
                                        PrroOperationService operations, ObjectMapper json) {
         this.db = Objects.requireNonNull(db);
         this.access = Objects.requireNonNull(access);
@@ -43,9 +43,10 @@ public class PrroPaymentOperationService {
     @Transactional
     public PaymentOperationView prepare(String paymentRequestKey, long branchNo,
                                         org.springframework.security.core.Authentication authentication) {
-        User user = access.user(authentication);
+        User user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
         Payment payment = lockEligiblePayment(paymentRequestKey, branchNo);
-        access.customer(user, payment.customerId(), payment.branchNo());
+        access.requireCustomerInBranch(payment.customerId(), payment.branchNo());
 
         List<Link> links = db.query("""
                 SELECT operation_id, branch_no, cash_account_id
@@ -103,9 +104,10 @@ public class PrroPaymentOperationService {
     @Transactional(readOnly = true)
     public PaymentOperationView status(String paymentRequestKey, long branchNo,
                                        org.springframework.security.core.Authentication authentication) {
-        User user = access.user(authentication);
+        User user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
         Payment payment = readEligiblePayment(paymentRequestKey, branchNo);
-        access.customer(user, payment.customerId(), payment.branchNo());
+        access.requireCustomerInBranch(payment.customerId(), payment.branchNo());
 
         List<Long> operationIds = db.query("""
                 SELECT operation_id
