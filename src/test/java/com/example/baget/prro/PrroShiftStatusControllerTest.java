@@ -75,7 +75,7 @@ class PrroShiftStatusControllerTest {
     @Test
     void lastCheckReturnsStatusAndDigestOfPreviousCheckDataSign() {
         stubDevice(null, null, 1);
-        byte[] previousXml = "<?xml version=\\"1.0\\"?><RQ V=\\"1\\"><DAT/></RQ>"
+        byte[] previousXml = "<?xml version=\"1.0\"?><RQ V=\"1\"><DAT/></RQ>"
                 .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         when(client.getLastCheck(any(CheckRequest.class))).thenReturn(
                 CheckResponse.newBuilder()
@@ -103,7 +103,7 @@ class PrroShiftStatusControllerTest {
         when(client.getLastCheck(any(CheckRequest.class))).thenReturn(
                 CheckResponse.newBuilder().setStatus(CheckResponse.Status.OK)
                         .setId("dps-check-123")
-                        .setDataSign(ByteString.copyFromUtf8("<?xml version=\\"1.0\\"?><RQ/>"))
+                        .setDataSign(ByteString.copyFromUtf8("<?xml version=\"1.0\"?><RQ/>"))
                         .build());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
 
