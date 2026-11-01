@@ -50,8 +50,8 @@ class PrroShiftStatusControllerTest {
                 StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
                         .setOpenShift(true).setOnline(true).setLastSigner("operator-serial").build());
 
-        var response = controller.status(7L,
-                Base64.getEncoder().encodeToString(new byte[]{1, 2, 3}), authentication);
+        var response = controller.status(new PrroShiftStatusController.ShiftStatusRequest(7L, "4000318883",
+                Base64.getEncoder().encodeToString(new byte[]{1, 2, 3})), authentication);
 
         assertEquals("OPEN", response.state());
         assertTrue(response.dpsOpenShift());
@@ -70,7 +70,7 @@ class PrroShiftStatusControllerTest {
                 .when(access).branch(user, 7L);
 
         assertThrows(ResponseStatusException.class, () -> controller.status(
-                7L, Base64.getEncoder().encodeToString(new byte[]{1}), authentication));
+                new PrroShiftStatusController.ShiftStatusRequest(7L, "4000318883", Base64.getEncoder().encodeToString(new byte[]{1})), authentication));
 
         verifyNoInteractions(db, client);
     }
@@ -81,8 +81,8 @@ class PrroShiftStatusControllerTest {
         doReturn(List.of()).when(db).query(anyString(), any(RowMapper.class), eq(7L));
 
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
-                () -> controller.status(7L,
-                        Base64.getEncoder().encodeToString(new byte[]{1}), authentication));
+                () -> controller.status(new PrroShiftStatusController.ShiftStatusRequest(7L, "4000318883",
+                        Base64.getEncoder().encodeToString(new byte[]{1})), authentication));
 
         assertEquals(404, error.getStatusCode().value());
         verifyNoInteractions(client);
@@ -98,8 +98,8 @@ class PrroShiftStatusControllerTest {
                 StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
                         .setOpenShift(false).setOnline(true).build());
 
-        var response = controller.status(7L,
-                Base64.getEncoder().encodeToString(new byte[]{1}), authentication);
+        var response = controller.status(new PrroShiftStatusController.ShiftStatusRequest(7L, "4000318883",
+                Base64.getEncoder().encodeToString(new byte[]{1})), authentication);
 
         assertEquals("RECONCILIATION_REQUIRED", response.state());
         assertFalse(response.dpsOpenShift());
