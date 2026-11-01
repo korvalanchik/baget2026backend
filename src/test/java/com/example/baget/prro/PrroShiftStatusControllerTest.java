@@ -73,7 +73,7 @@ class PrroShiftStatusControllerTest {
     }
 
     @Test
-    void lastCheckReturnsStatusAndDigestOfPreviousCheckDataSign() {
+    void lastCheckReturnsStatusAndDigestOfPreviousCheckDataSign() throws Exception {
         stubDevice(null, null, 1);
         byte[] previousXml = "<?xml version=\"1.0\"?><RQ V=\"1\"><DAT/></RQ>"
                 .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
