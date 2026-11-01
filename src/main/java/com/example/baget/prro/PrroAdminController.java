@@ -29,18 +29,6 @@ public class PrroAdminController {
         this.access = Objects.requireNonNull(access);
     }
 
-    @GetMapping("/../branches")
-    public List<BranchView> operationalBranches(Authentication authentication) {
-        var user = access.requireOperationalUser(authentication);
-        if (access.isGlobalOperator(user)) {
-            return db.query("SELECT BranchNo, BranchName FROM branches ORDER BY BranchNo",
-                    (rs, row) -> new BranchView(rs.getLong("BranchNo"), rs.getString("BranchName")));
-        }
-        return user.getAllowedBranches().stream()
-                .sorted(java.util.Comparator.comparing(Branch::getBranchNo))
-                .map(branch -> new BranchView(branch.getBranchNo(), branch.getName()))
-                .toList();
-    }
     @GetMapping("/branches")
     public List<BranchView> branches(Authentication authentication) {
         access.requireAdministrator(authentication);
