@@ -134,7 +134,7 @@ class PrroShiftStatusControllerTest {
         assertTrue(response.localShiftPrepared());
         assertTrue(response.localSignerBound());
         assertEquals(9L, response.deviceId());
-        verify(access).branch(user, 7L);
+        verify(access).requireBranchAccess(user, 7L);
         verify(client).getRroInfo(any(CheckRequest.class));
         verify(client).getRroStatus(any(CheckRequest.class));
     }
