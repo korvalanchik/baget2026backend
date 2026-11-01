@@ -4,6 +4,7 @@ import com.example.baget.finance.CustomerPaymentAccess;
 import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
+import com.programika.rro.ws.chk.CheckResponse;
 import com.programika.rro.ws.chk.RroInfoResponse;
 import com.programika.rro.ws.chk.StatusResponse;
 import jakarta.validation.Valid;
@@ -21,6 +22,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
@@ -144,6 +149,116 @@ public class PrroShiftStatusController {
                 status.getLastSigner(),
                 status.getErrorMessage());
     }
+
+    /**
+     * Read-only diagnostic endpoint for the previous fiscal document.
+     * DPS documents that lastChk returns the previous check in data_sign.
+     * Only metadata and a digest are returned; the signed document itself is
+     * kept server-side for the subsequent shift-open preparation workflow.
+     */
+    @PostMapping("/last-check")
+    public LastCheckResponse lastCheck(
+            @Valid @RequestBody ShiftStatusRequest request,
+            Authentication authentication) {
+        long branchNo = request.branchNo();
+        var user = access.user(authentication);
+        access.branch(user, branchNo);
+
+        final byte[] signature;
+        try {
+            signature = Base64.getDecoder().decode(request.signatureBase64());
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Підпис ПРРО має бути коректним рядком Base64.", ex);
+        }
+        if (signature.length == 0 || signature.length > 64 * 1024) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Некоректний розмір підпису ПРРО.");
+        }
+
+        List<Device> devices = db.query("""
+                SELECT id, rro_fn, display_name, environment, active_shift_key,
+                       active_signer_key_id, next_local_number
+                  FROM prro_devices
+                 WHERE branch_no = ? AND enabled = TRUE
+                 ORDER BY id
+                """, (rs, rowNum) -> new Device(
+                rs.getLong("id"),
+                rs.getString("rro_fn"),
+                rs.getString("display_name"),
+                rs.getString("environment"),
+                rs.getString("active_shift_key"),
+                rs.getString("active_signer_key_id"),
+                rs.getInt("next_local_number")), branchNo);
+
+        if (devices.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Для цієї філії не налаштовано активний ПРРО.");
+        }
+        if (devices.size() != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Для філії налаштовано кілька ПРРО. Потрібно визначити касу.");
+        }
+        Device device = devices.get(0);
+        if (!device.rroFn().equals(request.fiscalNumber().trim())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Фіскальний номер не відповідає ПРРО, налаштованому для цієї філії.");
+        }
+
+        CheckRequest signedRequest = CheckRequest.newBuilder()
+                .setRroFnSign(ByteString.copyFrom(signature))
+                .build();
+        final CheckResponse response;
+        try {
+            response = client.getLastCheck(signedRequest);
+        } catch (RuntimeException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Не вдалося отримати останній чек ПРРО від ДПС.", ex);
+        }
+
+        byte[] previousCheck = response.getDataSign().toByteArray();
+        return new LastCheckResponse(
+                branchNo,
+                device.id(),
+                device.rroFn(),
+                response.getStatusValue(),
+                response.getStatus().name(),
+                response.getId(),
+                previousCheck.length,
+                previousCheck.length > 0 && startsWithXml(previousCheck),
+                previousCheck.length == 0 ? null : sha256(previousCheck),
+                response.getErrorMessage());
+    }
+
+    private static boolean startsWithXml(byte[] bytes) {
+        byte[] prefix = "<?xml".getBytes(StandardCharsets.US_ASCII);
+        if (bytes.length < prefix.length) return false;
+        for (int i = 0; i < prefix.length; i++) {
+            if (bytes[i] != prefix[i]) return false;
+        }
+        return true;
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
+    }
+
+    public record LastCheckResponse(
+            long branchNo,
+            long deviceId,
+            String fiscalNumber,
+            int responseCode,
+            String responseStatus,
+            String fiscalDocumentId,
+            int dataSignLength,
+            boolean dataSignStartsWithXml,
+            String dataSignSha256,
+            String dpsMessage) {}
 
     public record ShiftStatusRequest(
             @Positive long branchNo,
