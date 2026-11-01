@@ -30,19 +30,20 @@ public class PrroBranchController {
     public DeviceView device(@PathVariable long branchNo, Authentication authentication) {
         var user = access.requireOperationalUser(authentication);
         access.requireBranchAccess(user, branchNo);
-        return db.query("SELECT id, rro_fn, display_name, environment FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
-                rs -> rs.next() ? new DeviceView(rs.getLong("id"), branchNo, rs.getString("rro_fn"),
-                        rs.getString("display_name"), rs.getString("environment")) : null, branchNo) == null
-                ? throwNotConfigured()
-                : db.queryForObject("SELECT id, rro_fn, display_name, environment FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
-                    (rs, row) -> new DeviceView(rs.getLong("id"), branchNo, rs.getString("rro_fn"), rs.getString("display_name"), rs.getString("environment")), branchNo);
-    }
-
-    private DeviceView throwNotConfigured() {
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Для цієї філії не налаштовано активний ПРРО.");
+        List<DeviceView> devices = db.query("SELECT id, rro_fn, display_name, environment FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
+                (rs, row) -> new DeviceView(rs.getLong("id"), branchNo, rs.getString("rro_fn"),
+                        rs.getString("display_name"), rs.getString("environment")), branchNo);
+        if (devices.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Для цієї філії не налаштовано активний ПРРО.");
+        }
+        if (devices.size() > 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Для філії налаштовано кілька активних ПРРО.");
+        }
+        return devices.get(0);
     }
 
     public record DeviceView(long id, long branchNo, String fiscalNumber, String displayName, String environment) {}
+
     @GetMapping
     public List<PrroAdminController.BranchView> branches(Authentication authentication) {
         var user = access.requireOperationalUser(authentication);
