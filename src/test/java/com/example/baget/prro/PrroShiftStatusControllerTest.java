@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.ResultSet;
@@ -38,6 +39,17 @@ class PrroShiftStatusControllerTest {
         authentication = mock(Authentication.class);
         user = mock(User.class);
         when(access.user(authentication)).thenReturn(user);
+    }
+
+    @Test
+    void exposesShiftStatusAsPostEndpoint() throws Exception {
+        var method = PrroShiftStatusController.class.getMethod(
+                "status", PrroShiftStatusController.ShiftStatusRequest.class, Authentication.class);
+
+        PostMapping mapping = method.getAnnotation(PostMapping.class);
+
+        assertNotNull(mapping);
+        assertArrayEquals(new String[]{"/status"}, mapping.value());
     }
 
     @Test
