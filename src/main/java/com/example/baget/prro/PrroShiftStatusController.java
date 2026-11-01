@@ -14,7 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,7 +46,7 @@ public class PrroShiftStatusController {
         this.client = Objects.requireNonNull(client, "client");
     }
 
-    @GetMapping("/status")
+    @PostMapping("/status")
     public ShiftStatusResponse status(
             @Valid @RequestBody ShiftStatusRequest request,
             Authentication authentication) {
