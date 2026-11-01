@@ -1,6 +1,6 @@
 package com.example.baget.prro;
 
-import com.example.baget.finance.CustomerPaymentAccess;
+
 import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.example.baget.users.User;
 import com.google.protobuf.ByteString;
@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class PrroShiftStatusControllerTest {
-    private CustomerPaymentAccess access;
+    private PrroAccessService access;
     private JdbcTemplate db;
     private DpsPrroGrpcClient client;
     private PrroShiftStatusController controller;
@@ -39,13 +39,13 @@ class PrroShiftStatusControllerTest {
 
     @BeforeEach
     void setUp() {
-        access = mock(CustomerPaymentAccess.class);
+        access = mock(PrroAccessService.class);
         db = mock(JdbcTemplate.class);
         client = mock(DpsPrroGrpcClient.class);
         controller = new PrroShiftStatusController(access, db, client);
         authentication = mock(Authentication.class);
         user = mock(User.class);
-        when(access.user(authentication)).thenReturn(user);
+        when(access.requireOperationalUser(authentication)).thenReturn(user);
     }
 
     @Test
@@ -93,7 +93,7 @@ class PrroShiftStatusControllerTest {
         assertEquals(previousXml.length, response.dataSignLength());
         assertTrue(response.dataSignStartsWithXml());
         assertEquals(64, response.dataSignSha256().length());
-        verify(access).branch(user, 7L);
+        verify(access).requireBranchAccess(user, 7L);
         verify(client).getLastCheck(any(CheckRequest.class));
     }
 
@@ -143,7 +143,7 @@ class PrroShiftStatusControllerTest {
     void refusesBranchAccessBeforeReadingDeviceOrCallingDps() {
         doThrow(new ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN))
-                .when(access).branch(user, 7L);
+                .when(access).requireBranchAccess(user, 7L);
 
         assertThrows(ResponseStatusException.class, () -> controller.status(
                 new PrroShiftStatusController.ShiftStatusRequest(7L, "4000318883", Base64.getEncoder().encodeToString(new byte[]{1})), authentication));
