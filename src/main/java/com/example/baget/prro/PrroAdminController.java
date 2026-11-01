@@ -1,5 +1,6 @@
 package com.example.baget.prro;
 
+import com.example.baget.prro.config.PrroProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -23,10 +24,12 @@ import java.util.Objects;
 public class PrroAdminController {
     private final JdbcTemplate db;
     private final PrroAccessService access;
+    private final PrroProperties properties;
 
-    public PrroAdminController(JdbcTemplate db, PrroAccessService access) {
+    public PrroAdminController(JdbcTemplate db, PrroAccessService access, PrroProperties properties) {
         this.db = Objects.requireNonNull(db);
         this.access = Objects.requireNonNull(access);
+        this.properties = Objects.requireNonNull(properties);
     }
 
     @GetMapping("/branches")
@@ -141,6 +144,13 @@ public class PrroAdminController {
         if (!"TEST".equals(request.environment()) && !"PRODUCTION".equals(request.environment())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Середовище має бути TEST або PRODUCTION.");
+        }
+        String configuredEnvironment = "cabinet.tax.gov.ua".equalsIgnoreCase(properties.getHost())
+                ? "TEST" : "PRODUCTION";
+        if (!configuredEnvironment.equals(request.environment())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Вибране середовище ПРРО не збігається з endpoint ДПС, налаштованим для цього backend. "
+                            + "Зміна середовища потребує окремого серверного налаштування.");
         }
         if (request.branchNo() != null) {
             Integer exists = db.queryForObject(
