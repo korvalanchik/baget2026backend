@@ -4,6 +4,7 @@ import com.example.baget.branch.Branch;
 import com.example.baget.users.User;
 import com.example.baget.users.UsersRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,9 +21,11 @@ public class PrroAccessService {
     );
 
     private final UsersRepository users;
+    private final JdbcTemplate db;
 
-    public PrroAccessService(UsersRepository users) {
+    public PrroAccessService(UsersRepository users, JdbcTemplate db) {
         this.users = Objects.requireNonNull(users);
+        this.db = Objects.requireNonNull(db);
     }
 
     public User requireOperationalUser(Authentication authentication) {
@@ -45,6 +48,26 @@ public class PrroAccessService {
                 .map(Branch::getBranchNo)
                 .anyMatch(number -> number != null && number == branchNo);
         if (!allowed) throw denied();
+    }
+
+
+    public void requireCustomerInBranch(long customerId, long branchNo) {
+        Long count = db.queryForObject("""
+                SELECT COUNT(*) FROM customer c
+                 WHERE c.CustNo = ?
+                   AND (EXISTS (SELECT 1 FROM orders o
+                                 WHERE o.CustNo = c.CustNo AND o.BranchNo = ?)
+                     OR EXISTS (SELECT 1 FROM invoices i
+                                JOIN invoice_orders io ON io.invoice_id = i.id
+                                JOIN orders o ON o.OrderNo = io.order_no
+                                WHERE (i.customer_id = c.CustNo OR i.payer_id = c.CustNo)
+                                  AND o.BranchNo = ?)
+                     OR EXISTS (SELECT 1 FROM customer_transactions ct
+                                WHERE ct.customer_id = c.CustNo AND ct.branch_id = ? AND ct.active = 1)
+                     OR EXISTS (SELECT 1 FROM partner_customer_movements pm
+                                WHERE pm.customer_id = c.CustNo AND pm.branch_no = ?))
+                """, Long.class, customerId, branchNo, branchNo, branchNo, branchNo);
+        if (count == null || count == 0) throw denied();
     }
 
     public void requireAdministrator(Authentication authentication) {
