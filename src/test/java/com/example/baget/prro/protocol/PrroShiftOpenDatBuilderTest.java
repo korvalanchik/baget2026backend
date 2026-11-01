@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PrroShiftOpenDatBuilderTest {
     private final PrroShiftOpenDatBuilder builder = new PrroShiftOpenDatBuilder();
@@ -27,8 +28,9 @@ class PrroShiftOpenDatBuilderTest {
                 "45&38765845", "ПН <3456>", 1,
                 LocalDateTime.of(2026, 11, 1, 9, 5));
         String canonical = canonicalizer.canonicalize(builder.build(document));
-        assertEquals(true, canonical.contains("FN=\"45&amp;38765845\""));
-        assertEquals(true, canonical.contains("TN=\"ПН &lt;3456&gt;\""));
+        assertTrue(canonical.contains("FN=\"45&amp;38765845\""));
+        // '>' is valid unescaped in an XML attribute; only '<' must be escaped.
+        assertTrue(canonical.contains("TN=\"ПН &lt;3456>\""));
     }
 
     @Test
