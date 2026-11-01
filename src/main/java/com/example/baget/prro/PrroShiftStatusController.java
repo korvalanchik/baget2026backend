@@ -1,6 +1,5 @@
 package com.example.baget.prro;
 
-import com.example.baget.finance.CustomerPaymentAccess;
 import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
@@ -40,11 +39,11 @@ import java.util.Objects;
 @RequestMapping("/api/prro/shift")
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroShiftStatusController {
-    private final CustomerPaymentAccess access;
+    private final PrroAccessService access;
     private final JdbcTemplate db;
     private final DpsPrroGrpcClient client;
 
-    public PrroShiftStatusController(CustomerPaymentAccess access, JdbcTemplate db,
+    public PrroShiftStatusController(PrroAccessService access, JdbcTemplate db,
                                      DpsPrroGrpcClient client) {
         this.access = Objects.requireNonNull(access, "access");
         this.db = Objects.requireNonNull(db, "db");
@@ -56,8 +55,8 @@ public class PrroShiftStatusController {
             @Valid @RequestBody ShiftStatusRequest request,
             Authentication authentication) {
         long branchNo = request.branchNo();
-        var user = access.user(authentication);
-        access.branch(user, branchNo);
+        var user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
 
         final byte[] signature;
         try {
