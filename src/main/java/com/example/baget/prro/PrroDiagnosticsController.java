@@ -28,18 +28,20 @@ import java.util.Objects;
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroDiagnosticsController {
     private final DpsPrroGrpcClient client;
+    private final PrroAccessService access;
 
-    public PrroDiagnosticsController(DpsPrroGrpcClient client) {
+    public PrroDiagnosticsController(DpsPrroGrpcClient client, PrroAccessService access) {
         this.client = Objects.requireNonNull(client, "client");
+        this.access = Objects.requireNonNull(access, "access");
     }
 
     @PostMapping("/info")
     public DiagnosticResponse info(@Valid @RequestBody InfoRequest request,
                                    Authentication authentication) {
-        if (authentication == null || authentication.getAuthorities().stream()
-                .noneMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))) {
+        var user = access.requireOperationalUser(authentication);
+        if (!access.isGlobalOperator(user)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Перевірка ПРРО доступна лише адміністратору.");
+                    "Діагностика ПРРО доступна адміністратору та старшому касиру.");
         }
 
         final byte[] signature;
