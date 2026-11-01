@@ -160,8 +160,8 @@ public class PrroShiftStatusController {
             @Valid @RequestBody ShiftStatusRequest request,
             Authentication authentication) {
         long branchNo = request.branchNo();
-        var user = access.user(authentication);
-        access.branch(user, branchNo);
+        var user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
 
         final byte[] signature;
         try {
