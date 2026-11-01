@@ -26,7 +26,8 @@ public class UserAdministrationService {
   var roleRows=db.queryForList("SELECT id,name FROM roles");var validRoles=new HashSet<Long>();Long adminRole=null;for(var r:roleRows){long id=((Number)r.get("id")).longValue();validRoles.add(id);if("ROLE_ADMIN".equals(r.get("name")))adminRole=id;}
   if(!validRoles.containsAll(e.roles()))throw bad("Невідома роль");
   boolean admin=adminRole!=null&&e.roles().contains(adminRole);
-  var validBranches=new HashSet<>(db.queryForList("SELECT BranchNo FROM branches",Long.class));if(!validBranches.containsAll(e.branches()))throw bad("Невідома філія");if(e.enabled()&&!admin&&e.branches().isEmpty())throw bad("Для активного користувача оберіть доступні філії");
+  boolean seniorCashier=roleRows.stream().anyMatch(r -> "ROLE_SENIOR_CASHIER".equals(r.get("name")) && e.roles().contains(((Number)r.get("id")).longValue()));
+  var validBranches=new HashSet<>(db.queryForList("SELECT BranchNo FROM branches",Long.class));if(!validBranches.containsAll(e.branches()))throw bad("Невідома філія");if(e.enabled()&&!admin&&!seniorCashier&&e.branches().isEmpty())throw bad("Для активного користувача оберіть доступні філії");
   boolean password=e.password()!=null&&!e.password().isEmpty();if((e.id()==null&&!password)||(password&&(e.password().length()<10||e.password().getBytes(StandardCharsets.UTF_8).length>72)))throw bad("Пароль: від 10 символів, не більше 72 байтів UTF-8");
   Map<String,Object> before=null;long id;
   if(e.id()!=null){id=e.id();var found=db.queryForList("SELECT id,username,email,enabled,access_revision AS revision FROM users WHERE id=? FOR UPDATE",id);if(found.isEmpty())throw bad("Користувача не знайдено");before=found.get(0);relations(before);if(((Number)before.get("revision")).longValue()!=e.revision())throw bad("Дані змінилися. Оновіть список");if(!e.username().equals(before.get("username")))throw bad("Логін існуючого користувача не змінюється");
