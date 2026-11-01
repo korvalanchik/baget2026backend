@@ -3,7 +3,9 @@ package com.example.baget.prro;
 import com.example.baget.finance.CustomerPaymentAccess;
 import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.example.baget.users.User;
+import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
+import com.programika.rro.ws.chk.CheckResponse;
 import com.programika.rro.ws.chk.RroInfoResponse;
 import com.programika.rro.ws.chk.StatusResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +70,50 @@ class PrroShiftStatusControllerTest {
 
         mvc.perform(get("/api/prro/shift/status"))
                 .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    void lastCheckReturnsStatusAndDigestOfPreviousCheckDataSign() {
+        stubDevice(null, null, 1);
+        byte[] previousXml = "<?xml version=\\"1.0\\"?><RQ V=\\"1\\"><DAT/></RQ>"
+                .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        when(client.getLastCheck(any(CheckRequest.class))).thenReturn(
+                CheckResponse.newBuilder()
+                        .setStatus(CheckResponse.Status.OK)
+                        .setId("dps-check-123")
+                        .setDataSign(ByteString.copyFrom(previousXml))
+                        .build());
+
+        var response = controller.lastCheck(new PrroShiftStatusController.ShiftStatusRequest(
+                7L, "4000318883", Base64.getEncoder().encodeToString(new byte[]{1, 2, 3})),
+                authentication);
+
+        assertEquals("OK", response.responseStatus());
+        assertEquals("dps-check-123", response.fiscalDocumentId());
+        assertEquals(previousXml.length, response.dataSignLength());
+        assertTrue(response.dataSignStartsWithXml());
+        assertEquals(64, response.dataSignSha256().length());
+        verify(access).branch(user, 7L);
+        verify(client).getLastCheck(any(CheckRequest.class));
+    }
+
+    @Test
+    void exposesLastCheckInspectionThroughPostEndpoint() throws Exception {
+        stubDevice(null, null, 1);
+        when(client.getLastCheck(any(CheckRequest.class))).thenReturn(
+                CheckResponse.newBuilder().setStatus(CheckResponse.Status.OK)
+                        .setId("dps-check-123")
+                        .setDataSign(ByteString.copyFromUtf8("<?xml version=\\"1.0\\"?><RQ/>"))
+                        .build());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        mvc.perform(post("/api/prro/shift/last-check")
+                        .principal(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"branchNo":7,"fiscalNumber":"4000318883","signatureBase64":"AQID"}
+                                """))
+                .andExpect(status().isOk());
     }
 
     @Test
