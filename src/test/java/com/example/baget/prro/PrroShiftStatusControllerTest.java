@@ -11,7 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.ResultSet;
@@ -21,6 +23,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class PrroShiftStatusControllerTest {
     private CustomerPaymentAccess access;
@@ -42,14 +47,27 @@ class PrroShiftStatusControllerTest {
     }
 
     @Test
-    void exposesShiftStatusAsPostEndpoint() throws Exception {
-        var method = PrroShiftStatusController.class.getMethod(
-                "status", PrroShiftStatusController.ShiftStatusRequest.class, Authentication.class);
+    void acceptsPostJsonRequestAndRejectsGetForShiftStatus() throws Exception {
+        stubDevice(null, null, 1);
+        when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
+                RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
+                        .setStatusRro(1).setOpenShift(false).setOnline(true).build());
+        when(client.getRroStatus(any(CheckRequest.class))).thenReturn(
+                StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
+                        .setOpenShift(false).setOnline(true).build());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        String body = """
+                {"branchNo":7,"fiscalNumber":"4000318883","signatureBase64":"AQID"}
+                """;
 
-        PostMapping mapping = method.getAnnotation(PostMapping.class);
+        mvc.perform(post("/api/prro/shift/status")
+                        .principal(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk());
 
-        assertNotNull(mapping);
-        assertArrayEquals(new String[]{"/status"}, mapping.value());
+        mvc.perform(get("/api/prro/shift/status"))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test
