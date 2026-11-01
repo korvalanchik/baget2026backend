@@ -105,14 +105,12 @@ public class PrroAdminController {
         if (!request.enabled() && current.activeShift()) {
             throw conflict("Спочатку закрийте зміну ПРРО, а потім вимикайте пристрій.");
         }
-        if (identityChanged) {
-            Integer unresolved = db.queryForObject("""
-                    SELECT COUNT(*) FROM prro_operations
-                     WHERE device_id = ? AND status IN ('SENDING', 'UNKNOWN_RESULT')
-                    """, Integer.class, id);
-            if (unresolved != null && unresolved > 0) {
-                throw conflict("Є операції з невідомим результатом. Спочатку звірте їх із ДПС.");
-            }
+        Integer unresolved = db.queryForObject("""
+                SELECT COUNT(*) FROM prro_operations
+                 WHERE device_id = ? AND status IN ('SENDING', 'UNKNOWN_RESULT')
+                """, Integer.class, id);
+        if ((identityChanged || !request.enabled()) && unresolved != null && unresolved > 0) {
+            throw conflict("Є операції з невідомим результатом. Спочатку звірте їх із ДПС.");
         }
         ensureBranchAvailable(request.branchNo(), id);
         db.update("""
