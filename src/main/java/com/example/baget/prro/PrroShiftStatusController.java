@@ -6,6 +6,7 @@ import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
 import com.programika.rro.ws.chk.RroInfoResponse;
 import com.programika.rro.ws.chk.StatusResponse;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -15,7 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -47,15 +48,15 @@ public class PrroShiftStatusController {
 
     @GetMapping("/status")
     public ShiftStatusResponse status(
-            @RequestParam @Positive long branchNo,
-            @RequestParam @NotBlank @Size(max = 100_000) String signatureBase64,
+            @Valid @RequestBody ShiftStatusRequest request,
             Authentication authentication) {
+        long branchNo = request.branchNo();
         var user = access.user(authentication);
         access.branch(user, branchNo);
 
         final byte[] signature;
         try {
-            signature = Base64.getDecoder().decode(signatureBase64);
+            signature = Base64.getDecoder().decode(request.signatureBase64());
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Підпис ПРРО має бути коректним рядком Base64.", ex);
@@ -90,6 +91,10 @@ public class PrroShiftStatusController {
         }
 
         Device device = devices.get(0);
+        if (!device.rroFn().equals(request.fiscalNumber().trim())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Фіскальний номер не відповідає ПРРО, налаштованому для цієї філії.");
+        }
         CheckRequest signedRequest = CheckRequest.newBuilder()
                 .setRroFnSign(ByteString.copyFrom(signature))
                 .build();
@@ -139,6 +144,11 @@ public class PrroShiftStatusController {
                 status.getLastSigner(),
                 status.getErrorMessage());
     }
+
+    public record ShiftStatusRequest(
+            @Positive long branchNo,
+            @NotBlank @Size(max = 32) String fiscalNumber,
+            @NotBlank @Size(max = 100_000) String signatureBase64) {}
 
     private record Device(long id, String rroFn, String displayName, String environment,
                           String activeShiftKey, String activeSignerKeyId, int nextLocalNumber) {}
