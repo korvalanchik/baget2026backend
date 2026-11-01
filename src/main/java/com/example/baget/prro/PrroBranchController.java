@@ -5,6 +5,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,6 +26,23 @@ public class PrroBranchController {
         this.access = Objects.requireNonNull(access);
     }
 
+    @GetMapping("/{branchNo}/device")
+    public DeviceView device(@PathVariable long branchNo, Authentication authentication) {
+        var user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
+        return db.query("SELECT id, rro_fn, display_name, environment FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
+                rs -> rs.next() ? new DeviceView(rs.getLong("id"), branchNo, rs.getString("rro_fn"),
+                        rs.getString("display_name"), rs.getString("environment")) : null, branchNo) == null
+                ? throwNotConfigured()
+                : db.queryForObject("SELECT id, rro_fn, display_name, environment FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
+                    (rs, row) -> new DeviceView(rs.getLong("id"), branchNo, rs.getString("rro_fn"), rs.getString("display_name"), rs.getString("environment")), branchNo);
+    }
+
+    private DeviceView throwNotConfigured() {
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Для цієї філії не налаштовано активний ПРРО.");
+    }
+
+    public record DeviceView(long id, long branchNo, String fiscalNumber, String displayName, String environment) {}
     @GetMapping
     public List<PrroAdminController.BranchView> branches(Authentication authentication) {
         var user = access.requireOperationalUser(authentication);
