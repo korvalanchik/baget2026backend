@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.sql.ResultSet;
 import java.util.Base64;
 import java.util.List;
 
@@ -40,11 +41,8 @@ class PrroShiftStatusControllerTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    void returnsOpenStateOnlyWhenDpsAndLocalDeviceStateAgree() {
-        doReturn(List.of(new DeviceRow(9L, "4000318883", "Каса тест", "TEST",
-                "shift-1", "operator-serial", 1)))
-                .when(db).query(anyString(), any(RowMapper.class), eq(7L));
+    void returnsOpenStateOnlyWhenDpsAndLocalDeviceStateAgree() throws Exception {
+        stubDevice("shift-1", "operator-serial", 1);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
                         .setStatusRro(1).setOpenShift(true).setOnline(true).build());
@@ -67,7 +65,7 @@ class PrroShiftStatusControllerTest {
 
     @Test
     void refusesBranchAccessBeforeReadingDeviceOrCallingDps() {
-        doThrow(new org.springframework.web.server.ResponseStatusException(
+        doThrow(new ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN))
                 .when(access).branch(user, 7L);
 
@@ -91,11 +89,8 @@ class PrroShiftStatusControllerTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    void flagsMismatchInsteadOfAssumingShiftIsOpen() {
-        doReturn(List.of(new DeviceRow(9L, "4000318883", "Каса тест", "TEST",
-                "shift-pending", "operator-serial", 1)))
-                .when(db).query(anyString(), any(RowMapper.class), eq(7L));
+    void flagsMismatchInsteadOfAssumingShiftIsOpen() throws Exception {
+        stubDevice("shift-pending", "operator-serial", 1);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
                         .setStatusRro(1).setOpenShift(false).setOnline(true).build());
@@ -111,6 +106,20 @@ class PrroShiftStatusControllerTest {
         assertTrue(response.localShiftPrepared());
     }
 
-    private record DeviceRow(long id, String rroFn, String displayName, String environment,
-                             String activeShiftKey, String activeSignerKeyId, int nextLocalNumber) {}
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void stubDevice(String activeShiftKey, String signerKeyId, int nextLocalNumber)
+            throws Exception {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("id")).thenReturn(9L);
+        when(rs.getString("rro_fn")).thenReturn("4000318883");
+        when(rs.getString("display_name")).thenReturn("Каса тест");
+        when(rs.getString("environment")).thenReturn("TEST");
+        when(rs.getString("active_shift_key")).thenReturn(activeShiftKey);
+        when(rs.getString("active_signer_key_id")).thenReturn(signerKeyId);
+        when(rs.getInt("next_local_number")).thenReturn(nextLocalNumber);
+        doAnswer(invocation -> {
+            RowMapper mapper = invocation.getArgument(1);
+            return List.of(mapper.mapRow(rs, 0));
+        }).when(db).query(anyString(), any(RowMapper.class), eq(7L));
+    }
 }
