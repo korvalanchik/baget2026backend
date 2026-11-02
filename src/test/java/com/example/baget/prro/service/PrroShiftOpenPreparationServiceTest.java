@@ -66,7 +66,7 @@ class PrroShiftOpenPreparationServiceTest {
                 .getBytes(StandardCharsets.UTF_8);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
-                        .setTins("2512702072").setOpenShift(false).setOnline(true).build());
+                        .setStatusRro(1).setTins("2512702072").setOpenShift(false).setOnline(true).build());
         when(client.getRroStatus(any(CheckRequest.class))).thenReturn(
                 StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
                         .setOpenShift(false).setOnline(true).build());
