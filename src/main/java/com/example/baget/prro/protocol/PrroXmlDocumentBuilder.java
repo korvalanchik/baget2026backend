@@ -38,6 +38,9 @@ public final class PrroXmlDocumentBuilder {
      */
     public String buildCheck(CheckDocument document) {
         Objects.requireNonNull(document, "document");
+        if (document.header().serialNumber().isBlank()) {
+            throw new IllegalArgumentException("A CHK document requires a non-blank serialNumber");
+        }
         validateCheckOperations(document);
 
         return writeXml(xml -> {
@@ -397,7 +400,7 @@ public final class PrroXmlDocumentBuilder {
         public PacketHeader {
             fiscalNumber = requireText(fiscalNumber, "fiscalNumber");
             taxpayerNumber = requireText(taxpayerNumber, "taxpayerNumber");
-            serialNumber = requireText(serialNumber, "serialNumber");
+            serialNumber = serialNumber == null ? "" : serialNumber.trim();
             if (packetId < 0) {
                 throw new IllegalArgumentException("packetId must not be negative");
             }
