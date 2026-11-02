@@ -143,6 +143,9 @@ public class PrroShiftOpenPreparationService {
                     "ДПС не підтвердила реєстрацію та стан ПРРО. "
                             + safeDpsMessage(status.getErrorMessage()));
         }
+        if (info.getStatusRro() != 1) {
+            throw conflict("ДПС не підтвердила активну реєстрацію цього ПРРО.");
+        }
         if (info.getOpenShift() || status.getOpenShift()) {
             throw conflict("За даними ДПС зміна вже відкрита. Потрібна звірка локального стану.");
         }
