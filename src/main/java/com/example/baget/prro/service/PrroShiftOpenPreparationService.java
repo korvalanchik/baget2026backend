@@ -101,7 +101,7 @@ public class PrroShiftOpenPreparationService {
         if (existing != null) {
             if (!"SHIFT_OPEN".equals(existing.sourceType())
                     || !existing.requestHash().equalsIgnoreCase(requestHash)
-                    || !existing.signerKeyId().equals(signerKeyId)) {
+                    || !Objects.equals(existing.signerKeyId(), signerKeyId)) {
                 throw conflict("Ключ ідемпотентності вже використано для іншої PRRO-операції.");
             }
             if (existing.status() != PrroOperationService.Status.PREPARED) {
@@ -136,7 +136,7 @@ public class PrroShiftOpenPreparationService {
                 || status.getStatus() != StatusResponse.Status.OK) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "ДПС не підтвердила реєстрацію та стан ПРРО. "
-                            + safeDpsMessage(info.getErrorMessage(), status.getErrorMessage()));
+                            + safeDpsMessage(status.getErrorMessage()));
         }
         if (info.getOpenShift() || status.getOpenShift()) {
             throw conflict("За даними ДПС зміна вже відкрита. Потрібна звірка локального стану.");
