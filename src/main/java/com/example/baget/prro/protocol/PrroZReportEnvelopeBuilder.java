@@ -1,5 +1,7 @@
 package com.example.baget.prro.protocol;
 
+import org.springframework.stereotype.Component;
+
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.Charset;
 import java.util.Objects;
@@ -9,6 +11,7 @@ import java.util.Objects;
  * The previous document input must be the exact signed bytes returned by DPS
  * in CheckResponse.data_sign. No decoding or XML reserialization is allowed.
  */
+@Component
 public final class PrroZReportEnvelopeBuilder {
     private static final Charset WINDOWS_1251 = Charset.forName("windows-1251");
     private static final byte[] XML_DECLARATION =
