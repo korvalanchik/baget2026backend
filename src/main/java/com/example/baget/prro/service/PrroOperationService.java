@@ -170,6 +170,92 @@ public class PrroOperationService {
         return findById(operationId);
     }
 
+    @Transactional(readOnly = true)
+    public Operation findByIdempotencyKey(long deviceId, String idempotencyKey) {
+        return findByIdempotencyKeyInternal(deviceId, idempotencyKey);
+    }
+
+    /**
+     * Stores the exact unsigned XML bytes that the cashier must sign locally.
+     * The write is one-time and only allowed while the operation is PREPARED.
+     * Concurrent retries may read the already-stored identical payload.
+     */
+    @Transactional
+    public PreparedSigningInput storeSigningInput(long operationId, byte[] signingInput,
+                                                   String signingInputHash,
+                                                   String previousDocumentHash,
+                                                   long dpsDateTime) {
+        if (signingInput == null || signingInput.length == 0) {
+            throw new IllegalArgumentException("PRRO signing input must not be empty");
+        }
+        if (signingInputHash == null || !SHA_256.matcher(signingInputHash).matches()) {
+            throw new IllegalArgumentException("signingInputHash must be a SHA-256 hex string");
+        }
+        if (previousDocumentHash != null && !SHA_256.matcher(previousDocumentHash).matches()) {
+            throw new IllegalArgumentException("previousDocumentHash must be a SHA-256 hex string");
+        }
+        if (dpsDateTime <= 0) {
+            throw new IllegalArgumentException("dpsDateTime must be positive");
+        }
+
+        int changed = jdbcTemplate.update("""
+                UPDATE prro_operations
+                   SET signing_input = ?, signing_input_hash = ?,
+                       previous_document_hash = ?, dps_date_time = ?
+                 WHERE id = ? AND status = 'PREPARED' AND signing_input IS NULL
+                """, signingInput, signingInputHash.toLowerCase(Locale.ROOT),
+                previousDocumentHash == null ? null : previousDocumentHash.toLowerCase(Locale.ROOT),
+                dpsDateTime, operationId);
+
+        PreparedSigningInput stored = getPreparedSigningInput(operationId);
+        if (stored == null) {
+            throw new OperationStateConflictException(
+                    "Unable to persist signing input for PRRO operation " + operationId);
+        }
+        if (changed == 0 && (!java.util.Arrays.equals(stored.bytes(), signingInput)
+                || stored.dpsDateTime() != dpsDateTime
+                || !Objects.equals(stored.previousDocumentHash(), previousDocumentHash))) {
+            throw new IdempotencyConflictException(
+                    "A different signing input is already stored for this PRRO operation");
+        }
+        return stored;
+    }
+
+    @Transactional(readOnly = true)
+    public PreparedSigningInput getPreparedSigningInput(long operationId) {
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT signing_input, signing_input_hash, previous_document_hash, dps_date_time
+                      FROM prro_operations
+                     WHERE id = ?
+                    """, (rs, rowNum) -> {
+                byte[] bytes = rs.getBytes("signing_input");
+                long dateTime = rs.getLong("dps_date_time");
+                Long dateTimeValue = rs.wasNull() ? null : dateTime;
+                return bytes == null || dateTimeValue == null ? null : new PreparedSigningInput(
+                        bytes, rs.getString("signing_input_hash"),
+                        rs.getString("previous_document_hash"), dateTimeValue);
+            }, operationId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw new IllegalArgumentException("PRRO operation not found: " + operationId, ex);
+        }
+    }
+
+    public record PreparedSigningInput(byte[] bytes, String sha256,
+                                       String previousDocumentHash, long dpsDateTime) {
+        public PreparedSigningInput {
+            if (bytes == null || bytes.length == 0) {
+                throw new IllegalArgumentException("Signing input must not be empty");
+            }
+            bytes = bytes.clone();
+        }
+
+        @Override
+        public byte[] bytes() {
+            return bytes.clone();
+        }
+    }
+
     private Device lockDevice(long deviceId) {
         try {
             return jdbcTemplate.queryForObject("""
