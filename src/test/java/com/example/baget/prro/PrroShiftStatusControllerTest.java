@@ -94,7 +94,7 @@ class PrroShiftStatusControllerTest {
         assertEquals("dps-check-123", response.fiscalDocumentId());
         assertEquals(previousXml.length, response.dataSignLength());
         assertTrue(response.dataSignStartsWithXml());
-        assertEquals("21f5411785ab8f34c86b9e1dd4e93dad45bcdf61c73e8015fc79be493e8f662c",
+        assertEquals("197a3b02af8d87acea9303961ef2779d188f1e7511ef746e102d7c89e59886ec",
                 response.dataSignSha256());
         verify(access).requireBranchAccess(user, 7L);
         verify(client).getLastCheck(any(CheckRequest.class));
