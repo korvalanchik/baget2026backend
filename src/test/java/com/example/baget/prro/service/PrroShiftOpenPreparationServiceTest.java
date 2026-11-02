@@ -65,8 +65,7 @@ class PrroShiftOpenPreparationServiceTest {
     void buildsAndPersistsShiftOpenEnvelopeWithHashOfPreviousSigningInput() throws Exception {
         byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
                 + "<RQ V=\"1\"><DAT><C T=\"108\"></C></DAT>"
-                + "<Signature>signed-previous-document</Signature>")
-                .getBytes(StandardCharsets.UTF_8);
+                + "<MAC ID=\"\"></MAC></RQ>").getBytes(StandardCharsets.UTF_8);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
                         .setStatusRro(1).setTins("2512702072").setOpenShift(false).setOnline(true)
