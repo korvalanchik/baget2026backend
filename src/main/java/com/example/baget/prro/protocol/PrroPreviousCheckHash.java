@@ -29,7 +29,7 @@ public final class PrroPreviousCheckHash {
         }
         try {
             return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(exactPreviousSignedCheckXml));
+                    MessageDigest.getInstance("SHA-256").digest(exactPreviousSigningInput));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is not available", ex);
         }
