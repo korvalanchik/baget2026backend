@@ -72,7 +72,7 @@ public class PrroOperationService {
             ensureSubmissionOrder(before);
         }
 
-        jdbcTemplate.update("""
+        int changed = jdbcTemplate.update("""
                 UPDATE prro_operations
                    SET status = ?,
                        signed_document_hash = COALESCE(?, signed_document_hash),
@@ -199,7 +199,7 @@ public class PrroOperationService {
             throw new IllegalArgumentException("dpsDateTime must be positive");
         }
 
-        int changed = jdbcTemplate.update("""
+        jdbcTemplate.update("""
                 UPDATE prro_operations
                    SET signing_input = ?, signing_input_hash = ?,
                        previous_document_hash = ?, dps_date_time = ?
