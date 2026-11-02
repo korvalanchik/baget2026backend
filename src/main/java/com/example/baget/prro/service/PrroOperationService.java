@@ -30,7 +30,7 @@ public class PrroOperationService {
         validate(command);
 
         Device device = lockDevice(command.deviceId());
-        Operation existing = findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
+        Operation existing = findByIdempotencyKeyInternal(command.deviceId(), command.idempotencyKey());
         if (existing != null) {
             if (!existing.requestHash().equalsIgnoreCase(command.requestHash())
                     || !existing.shiftKey().equals(command.shiftKey())
@@ -53,7 +53,7 @@ public class PrroOperationService {
                 command.sourceReference(), command.documentType(), localNumber,
                 command.signerKeyId(), command.createdBy());
 
-        return findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
+        return findByIdempotencyKeyInternal(command.deviceId(), command.idempotencyKey());
     }
 
     @Transactional
@@ -170,6 +170,89 @@ public class PrroOperationService {
         return findById(operationId);
     }
 
+    @Transactional(readOnly = true)
+    public Operation findByIdempotencyKey(long deviceId, String idempotencyKey) {
+        return findByIdempotencyKeyInternal(deviceId, idempotencyKey);
+    }
+
+    /**
+     * Stores the exact unsigned XML bytes that the cashier must sign locally.
+     * The write is one-time and only allowed while the operation is PREPARED.
+     * Concurrent retries may read the already-stored identical payload.
+     */
+    @Transactional
+    public PreparedSigningInput storeSigningInput(long operationId, byte[] signingInput,
+                                                   String signingInputHash,
+                                                   String previousDocumentHash,
+                                                   long dpsDateTime) {
+        if (signingInput == null || signingInput.length == 0) {
+            throw new IllegalArgumentException("PRRO signing input must not be empty");
+        }
+        if (signingInputHash == null || !SHA_256.matcher(signingInputHash).matches()
+                || !sha256(signingInput).equalsIgnoreCase(signingInputHash)) {
+            throw new IllegalArgumentException("signingInputHash must match the SHA-256 of signingInput");
+        }
+        if (previousDocumentHash != null && !SHA_256.matcher(previousDocumentHash).matches()) {
+            throw new IllegalArgumentException("previousDocumentHash must be a SHA-256 hex string");
+        }
+        if (dpsDateTime <= 0) {
+            throw new IllegalArgumentException("dpsDateTime must be positive");
+        }
+
+        jdbcTemplate.update("""
+                UPDATE prro_operations
+                   SET signing_input = ?, signing_input_hash = ?,
+                       previous_document_hash = ?, dps_date_time = ?
+                 WHERE id = ? AND status = 'PREPARED' AND signing_input IS NULL
+                """, signingInput, signingInputHash.toLowerCase(Locale.ROOT),
+                previousDocumentHash == null ? null : previousDocumentHash.toLowerCase(Locale.ROOT),
+                dpsDateTime, operationId);
+
+        PreparedSigningInput stored = getPreparedSigningInput(operationId);
+        if (stored == null) {
+            throw new OperationStateConflictException(
+                    "Unable to persist signing input for PRRO operation " + operationId);
+        }
+        // If another request with the same idempotency key won the race,
+        // its first persisted payload is authoritative and must be reused.
+        return stored;
+    }
+
+    @Transactional(readOnly = true)
+    public PreparedSigningInput getPreparedSigningInput(long operationId) {
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT signing_input, signing_input_hash, previous_document_hash, dps_date_time
+                      FROM prro_operations
+                     WHERE id = ?
+                    """, (rs, rowNum) -> {
+                byte[] bytes = rs.getBytes("signing_input");
+                long dateTime = rs.getLong("dps_date_time");
+                Long dateTimeValue = rs.wasNull() ? null : dateTime;
+                return bytes == null || dateTimeValue == null ? null : new PreparedSigningInput(
+                        bytes, rs.getString("signing_input_hash"),
+                        rs.getString("previous_document_hash"), dateTimeValue);
+            }, operationId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw new IllegalArgumentException("PRRO operation not found: " + operationId, ex);
+        }
+    }
+
+    public record PreparedSigningInput(byte[] bytes, String sha256,
+                                       String previousDocumentHash, long dpsDateTime) {
+        public PreparedSigningInput {
+            if (bytes == null || bytes.length == 0) {
+                throw new IllegalArgumentException("Signing input must not be empty");
+            }
+            bytes = bytes.clone();
+        }
+
+        @Override
+        public byte[] bytes() {
+            return bytes.clone();
+        }
+    }
+
     private Device lockDevice(long deviceId) {
         try {
             return jdbcTemplate.queryForObject("""
@@ -232,7 +315,7 @@ public class PrroOperationService {
         }
     }
 
-    private Operation findByIdempotencyKey(long deviceId, String key) {
+    private Operation findByIdempotencyKeyInternal(long deviceId, String key) {
         try {
             return jdbcTemplate.queryForObject("""
                     SELECT id, device_id, shift_key, idempotency_key, request_hash, source_type,
@@ -322,6 +405,15 @@ public class PrroOperationService {
 
     private static String truncate(String value, int maxLength) {
         return value == null || value.length() <= maxLength ? value : value.substring(0, maxLength);
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     private record Device(long id, String environment, boolean enabled, String activeShiftKey,
