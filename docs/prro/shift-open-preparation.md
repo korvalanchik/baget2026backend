@@ -20,7 +20,7 @@ Request:
 
 The fiscal-number signature is used for `infoRro`, `statusRro`, and `lastChk`. The backend checks branch access, the configured device, DPS registration/status, online state, and that DPS reports the shift closed.
 
-The taxpayer number (`TN`) is taken from `RroInfoResponse.tins`. The `DI` packet identifier is the persisted PRRO operation ID. The service uses local number `0`, document type `SERVICECHK`, and the shift-open command `C T="108"`.
+The taxpayer number (`TN`) is taken from `RroInfoResponse.tins`. The supplied `signerKeyId` must match a serial in the operator list returned by `infoRro`; otherwise preparation is rejected. The `DI` packet identifier is the persisted PRRO operation ID. The service uses local number `0`, document type `SERVICECHK`, and the shift-open command `C T="108"`.
 
 ## Hash chain
 
@@ -32,7 +32,7 @@ Response includes `signingInputBase64`, the exact Windows-1251 XML bytes the bro
 
 ## Signing identity
 
-`signerKeyId` is supplied by the browser from the certificate selected in IIT and is bound to the prepared shift. This preparation endpoint records the identifier but does not cryptographically validate the client-supplied identifier. DPS remains the authority that validates the signature and registered cashier certificate when the signed document is submitted. Do not treat this value alone as proof of signer identity.
+`signerKeyId` is supplied by the browser from the certificate selected in IIT and is bound to the prepared shift. The backend checks that the identifier appears in the operator list returned by DPS `infoRro`. This does not cryptographically prove that the browser later signs with that key; DPS validates the actual signature and registered cashier certificate when the signed document is submitted.
 
 ## Safety boundary / next step
 
