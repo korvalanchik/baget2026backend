@@ -113,7 +113,7 @@ class PrroShiftOpenPreparationServiceTest {
     }
 
     @Test
-    void returnsStoredPreparationWithoutCallingDpsAgain() {
+    void returnsStoredPreparationWithoutCallingDpsAgain() throws Exception {
         when(deviceRow.getString("active_shift_key")).thenReturn("active-shift");
         String shiftKey = UUID.nameUUIDFromBytes(
                 "baget-prro-shift-open:2:open-shift-8-002".getBytes(StandardCharsets.UTF_8)).toString();
