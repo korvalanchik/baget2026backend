@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.core.Authentication;
 
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.util.Base64;
@@ -111,8 +112,10 @@ class PrroShiftOpenPreparationServiceTest {
         when(deviceRow.getString("active_shift_key")).thenReturn("active-shift");
         String shiftKey = UUID.nameUUIDFromBytes(
                 "baget-prro-shift-open:2:open-shift-8-002".getBytes(StandardCharsets.UTF_8)).toString();
+        when(deviceRow.getString("active_shift_key")).thenReturn(shiftKey);
+        String requestHash = sha256("8|2|4000318883|operator-cert-serial");
         var operation = new PrroOperationService.Operation(
-                102L, 2L, shiftKey, "open-shift-8-002", "b".repeat(64),
+                102L, 2L, shiftKey, "open-shift-8-002", requestHash,
                 "SHIFT_OPEN", null, "SERVICECHK", 0, "operator-cert-serial",
                 PrroOperationService.Status.PREPARED, null, null, null, null, "cashier");
         byte[] savedXml = "<?xml version=\"1.0\"?><RQ/>".getBytes(StandardCharsets.UTF_8);
