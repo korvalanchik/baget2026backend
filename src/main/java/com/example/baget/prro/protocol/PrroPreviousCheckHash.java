@@ -8,22 +8,22 @@ import java.util.HexFormat;
  * Computes the SHA-256 hexadecimal hash used for the previous-Check link in
  * the Electronic Cabinet gRPC PRRO protocol.
  *
- * <p>The input must be the exact bytes of the previous QES-signed Check XML
- * document, including its signature and timestamp, as returned by DPS in
- * {@code CheckResponse.data_sign} or as originally sent in
- * {@code Check.check_sign}. Do not hash the unsigned XML, decode/re-encode the
- * payload, normalize XML, or serialize it again.</p>
+ * <p>The input must be the exact unsigned XML envelope that was persisted as
+ * {@code prro_operations.signing_input} and passed to IIT for signing. DPS
+ * links the next document to these original signing-input bytes, not to the
+ * CMS/PKCS##7 signature container returned in {@code CheckResponse.data_sign}.
+ * Do not decode/re-encode, normalize, or serialize the bytes again.</p>
  *
- * <p>This utility only hashes the supplied signed XML bytes. The caller is
- * responsible for obtaining the authoritative previous document and for
- * handling the first-document case.</p>
+ * <p>This utility only hashes the supplied signing-input bytes. The caller is
+ * responsible for obtaining the authoritative previous fiscalized operation
+ * and for handling the first-document case.</p>
  */
 public final class PrroPreviousCheckHash {
 
     private PrroPreviousCheckHash() {
     }
 
-    public static String sha256Hex(byte[] exactPreviousSignedCheckXml) {
+    public static String sha256Hex(byte[] exactPreviousSigningInput) {
         if (exactPreviousSignedCheckXml == null || exactPreviousSignedCheckXml.length == 0) {
             throw new IllegalArgumentException("Previous signed Check XML bytes must not be empty");
         }
