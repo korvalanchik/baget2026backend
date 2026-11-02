@@ -56,7 +56,7 @@ public class PrroAdminController {
                  ORDER BY d.branch_no IS NULL, d.branch_no, d.id
                 """, (rs, row) -> new DeviceView(
                 rs.getLong("id"),
-                (Long) rs.getObject("branch_no"),
+                nullableLong(rs.getObject("branch_no")),
                 rs.getString("BranchName"),
                 rs.getString("rro_fn"),
                 rs.getString("display_name"),
@@ -133,7 +133,7 @@ public class PrroAdminController {
                  ORDER BY id DESC
                  LIMIT 200
                 """, (rs, row) -> new AuditView(rs.getLong("id"),
-                (Long) rs.getObject("device_id"), rs.getString("actor"),
+                nullableLong(rs.getObject("device_id")), rs.getString("actor"),
                 rs.getString("action"), rs.getString("snapshot"),
                 rs.getTimestamp("created_at").toInstant().toString()));
     }
@@ -179,7 +179,7 @@ public class PrroAdminController {
         List<DeviceState> rows = db.query("""
                 SELECT branch_no, rro_fn, environment, active_shift_key
                   FROM prro_devices WHERE id = ?
-                """, (rs, row) -> new DeviceState((Long) rs.getObject("branch_no"),
+                """, (rs, row) -> new DeviceState(nullableLong(rs.getObject("branch_no")),
                 rs.getString("rro_fn"), rs.getString("environment"),
                 rs.getString("active_shift_key") != null), id);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ПРРО не знайдено.");
@@ -195,7 +195,7 @@ public class PrroAdminController {
                   FROM prro_devices d LEFT JOIN branches b ON b.BranchNo = d.branch_no
                  WHERE d.id = ?
                 """, (rs, row) -> new DeviceView(rs.getLong("id"),
-                (Long) rs.getObject("branch_no"), rs.getString("BranchName"),
+                nullableLong(rs.getObject("branch_no")), rs.getString("BranchName"),
                 rs.getString("rro_fn"), rs.getString("display_name"),
                 rs.getString("environment"), rs.getBoolean("enabled"),
                 rs.getString("active_shift_key") != null,
@@ -215,6 +215,10 @@ public class PrroAdminController {
                 INSERT INTO prro_device_audit (device_id, actor, action, snapshot)
                 VALUES (?, ?, ?, CAST(? AS JSON))
                 """, id, actor, action, snapshot);
+    }
+
+    private static Long nullableLong(Object value) {
+        return value == null ? null : ((Number) value).longValue();
     }
 
     private static String escape(String value) {
