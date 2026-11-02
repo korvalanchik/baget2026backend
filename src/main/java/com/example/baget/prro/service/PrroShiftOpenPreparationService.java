@@ -146,6 +146,11 @@ public class PrroShiftOpenPreparationService {
         if (info.getStatusRro() != 1) {
             throw conflict("ДПС не підтвердила активну реєстрацію цього ПРРО.");
         }
+        boolean signerRegistered = info.getOperatorsList().stream()
+                .anyMatch(operator -> signerKeyId.equalsIgnoreCase(operator.getSerial()));
+        if (!signerRegistered) {
+            throw conflict("Вказаний сертифікат касира не знайдено серед операторів, зареєстрованих у цьому ПРРО.");
+        }
         if (info.getOpenShift() || status.getOpenShift()) {
             throw conflict("За даними ДПС зміна вже відкрита. Потрібна звірка локального стану.");
         }
