@@ -11,7 +11,7 @@ import java.util.HexFormat;
  * <p>The input must be the exact unsigned XML envelope that was persisted as
  * {@code prro_operations.signing_input} and passed to IIT for signing. DPS
  * links the next document to these original signing-input bytes, not to the
- * CMS/PKCS##7 signature container returned in {@code CheckResponse.data_sign}.
+ * CMS/PKCS#7 signature container returned in {@code CheckResponse.data_sign}.
  * Do not decode/re-encode, normalize, or serialize the bytes again.</p>
  *
  * <p>This utility only hashes the supplied signing-input bytes. The caller is
