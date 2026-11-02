@@ -62,8 +62,8 @@ class PrroShiftOpenPreparationServiceTest {
     }
 
     @Test
-    void buildsAndPersistsShiftOpenEnvelopeWithHashOfPreviousSignedXml() throws Exception {
-        byte[] previousSignedXml = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+    void buildsAndPersistsShiftOpenEnvelopeWithHashOfPreviousSigningInput() throws Exception {
+        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
                 + "<RQ V=\"1\"><DAT><C T=\"108\"></C></DAT>"
                 + "<Signature>signed-previous-document</Signature>")
                 .getBytes(StandardCharsets.UTF_8);
@@ -77,8 +77,11 @@ class PrroShiftOpenPreparationServiceTest {
                         .setOpenShift(false).setOnline(true).build());
         when(client.getLastCheck(any(CheckRequest.class))).thenReturn(
                 CheckResponse.newBuilder().setStatus(CheckResponse.Status.OK)
-                        .setDataSign(ByteString.copyFrom(previousSignedXml)).build());
+                        .setDataSign(ByteString.copyFrom("signed-cms-payload".getBytes(StandardCharsets.UTF_8)))
+                        .setId("previous-fiscal-id").build());
         when(operations.findByIdempotencyKey(2L, "open-shift-8-001")).thenReturn(null);
+        when(operations.getFiscalizedSigningInput(2L, "previous-fiscal-id"))
+                .thenReturn(previousSigningInput);
 
         String shiftKey = UUID.nameUUIDFromBytes(
                 "baget-prro-shift-open:2:open-shift-8-001".getBytes(StandardCharsets.UTF_8)).toString();
@@ -88,7 +91,7 @@ class PrroShiftOpenPreparationServiceTest {
                 PrroOperationService.Status.PREPARED, null, null, null, null, "cashier");
         when(operations.prepare(any(PrroOperationService.PrepareOperation.class))).thenReturn(operation);
         when(operations.storeSigningInput(eq(101L), any(byte[].class), anyString(),
-                eq(PrroPreviousCheckHash.sha256Hex(previousSignedXml)), anyLong()))
+                eq(PrroPreviousCheckHash.sha256Hex(previousSigningInput)), anyLong()))
                 .thenAnswer(invocation -> new PrroOperationService.PreparedSigningInput(
                         invocation.getArgument(1), invocation.getArgument(2),
                         invocation.getArgument(3), invocation.getArgument(4)));
@@ -101,7 +104,7 @@ class PrroShiftOpenPreparationServiceTest {
         assertEquals(0, result.localNumber());
         assertEquals("PREPARED", result.status());
         assertEquals(14, Long.toString(result.dateTime()).length());
-        assertEquals(PrroPreviousCheckHash.sha256Hex(previousSignedXml),
+        assertEquals(PrroPreviousCheckHash.sha256Hex(previousSigningInput),
                 result.previousDocumentSha256());
         String xml = new String(Base64.getDecoder().decode(result.signingInputBase64()),
                 Charset.forName("windows-1251"));
