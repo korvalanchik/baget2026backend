@@ -19,6 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -49,6 +50,7 @@ public class PrroShiftOpenPreparationService {
     private final PrroOperationService operations;
     private final PrroShiftOpenEnvelopeBuilder envelopeBuilder;
 
+    @Autowired
     public PrroShiftOpenPreparationService(PrroAccessService access, JdbcTemplate db,
                                            DpsPrroGrpcClient client,
                                            PrroOperationService operations) {
