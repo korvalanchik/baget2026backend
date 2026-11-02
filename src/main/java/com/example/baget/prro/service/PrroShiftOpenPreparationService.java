@@ -12,6 +12,9 @@ import com.programika.rro.ws.chk.RroInfoResponse;
 import com.programika.rro.ws.chk.StatusResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -106,6 +109,9 @@ public class PrroShiftOpenPreparationService {
             if (existing.status() != PrroOperationService.Status.PREPARED) {
                 throw conflict("Операція відкриття зміни вже перейшла у стан "
                         + existing.status() + ". Повторна підготовка заборонена.");
+            }
+            if (!Objects.equals(device.activeShiftKey(), existing.shiftKey())) {
+                throw conflict("Локальний стан зміни не відповідає збереженій операції відкриття.");
             }
             PrroOperationService.PreparedSigningInput saved =
                     operations.getPreparedSigningInput(existing.id());
@@ -231,9 +237,11 @@ public class PrroShiftOpenPreparationService {
         return new ResponseStatusException(HttpStatus.CONFLICT, message);
     }
 
-    public record PrepareRequest(long branchNo, String fiscalNumber,
-                                String rroSignatureBase64, String signerKeyId,
-                                String idempotencyKey) {
+    public record PrepareRequest(@Positive long branchNo,
+                                @NotBlank @Size(max = 32) String fiscalNumber,
+                                @NotBlank @Size(max = 100_000) String rroSignatureBase64,
+                                @NotBlank @Size(max = 128) String signerKeyId,
+                                @NotBlank @Size(max = 100) String idempotencyKey) {
         public PrepareRequest {
             if (branchNo <= 0) throw new IllegalArgumentException("branchNo must be positive");
             if (fiscalNumber == null || fiscalNumber.isBlank() || fiscalNumber.length() > 32) {
