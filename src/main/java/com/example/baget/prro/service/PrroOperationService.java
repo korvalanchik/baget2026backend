@@ -30,7 +30,7 @@ public class PrroOperationService {
         validate(command);
 
         Device device = lockDevice(command.deviceId());
-        Operation existing = findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
+        Operation existing = findByIdempotencyKeyInternal(command.deviceId(), command.idempotencyKey());
         if (existing != null) {
             if (!existing.requestHash().equalsIgnoreCase(command.requestHash())
                     || !existing.shiftKey().equals(command.shiftKey())
@@ -53,7 +53,7 @@ public class PrroOperationService {
                 command.sourceReference(), command.documentType(), localNumber,
                 command.signerKeyId(), command.createdBy());
 
-        return findByIdempotencyKey(command.deviceId(), command.idempotencyKey());
+        return findByIdempotencyKeyInternal(command.deviceId(), command.idempotencyKey());
     }
 
     @Transactional
@@ -318,7 +318,7 @@ public class PrroOperationService {
         }
     }
 
-    private Operation findByIdempotencyKey(long deviceId, String key) {
+    private Operation findByIdempotencyKeyInternal(long deviceId, String key) {
         try {
             return jdbcTemplate.queryForObject("""
                     SELECT id, device_id, shift_key, idempotency_key, request_hash, source_type,
