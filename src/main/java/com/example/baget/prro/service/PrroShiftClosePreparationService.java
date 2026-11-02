@@ -189,8 +189,13 @@ public class PrroShiftClosePreparationService {
                     "У відповіді infoRro відсутній податковий номер платника (TN).");
         }
 
-        byte[] previousSignedDocument = lastCheck.getDataSign().toByteArray();
-        String previousHash = sha256(previousSignedDocument);
+        byte[] previousSigningInput =
+                operations.getFiscalizedSigningInput(device.id(), lastCheck.getId());
+        if (previousSigningInput == null || previousSigningInput.length == 0) {
+            throw conflict("Для останнього документа ДПС не знайдено локальний signing_input. "
+                    + "Закриття зміни зупинено, щоб не сформувати неправильний MAC.");
+        }
+        String previousHash = sha256(previousSigningInput);
         PrroOperationService.Operation operation = existing;
         if (operation == null) {
             operation = operations.prepare(new PrroOperationService.PrepareOperation(
@@ -220,7 +225,7 @@ public class PrroShiftClosePreparationService {
                                 PrroXmlDocumentBuilder.PaymentType.CASH, null, ZERO, ZERO)),
                         new PrroXmlDocumentBuilder.CheckCounts(0, 0));
         String datXml = documentBuilder.buildZReport(zReport);
-        byte[] signingInput = envelopeBuilder.build(datXml, previousSignedDocument);
+        byte[] signingInput = envelopeBuilder.build(datXml, previousSigningInput);
         String signingInputHash = sha256(signingInput);
 
         PrroOperationService.PreparedSigningInput stored = operations.storeSigningInput(

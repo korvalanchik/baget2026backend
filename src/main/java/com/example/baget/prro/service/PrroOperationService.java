@@ -238,6 +238,39 @@ public class PrroOperationService {
         }
     }
 
+    /**
+     * Returns the exact unsigned XML bytes originally supplied to IIT for a
+     * fiscalized document. These bytes, rather than the signed CMS payload,
+     * are the input to the DPS previous-document SHA-256 chain.
+     *
+     * @return a defensive copy, or {@code null} when the document is not a
+     * locally persisted fiscalized operation
+     */
+    @Transactional(readOnly = true)
+    public byte[] getFiscalizedSigningInput(long deviceId, String fiscalDocumentId) {
+        if (deviceId <= 0) {
+            throw new IllegalArgumentException("deviceId must be positive");
+        }
+        if (fiscalDocumentId == null || fiscalDocumentId.isBlank()) {
+            throw new IllegalArgumentException("fiscalDocumentId is required");
+        }
+        try {
+            byte[] bytes = jdbcTemplate.queryForObject("""
+                    SELECT signing_input
+                      FROM prro_operations
+                     WHERE device_id = ?
+                       AND fiscal_document_id = ?
+                       AND status = 'FISCALIZED'
+                     ORDER BY local_number DESC, id DESC
+                     LIMIT 1
+                    """, (rs, rowNum) -> rs.getBytes("signing_input"),
+                    deviceId, fiscalDocumentId);
+            return bytes == null ? null : bytes.clone();
+        } catch (EmptyResultDataAccessException ex) {
+            return null;
+        }
+    }
+
     public record PreparedSigningInput(byte[] bytes, String sha256,
                                        String previousDocumentHash, long dpsDateTime) {
         public PreparedSigningInput {

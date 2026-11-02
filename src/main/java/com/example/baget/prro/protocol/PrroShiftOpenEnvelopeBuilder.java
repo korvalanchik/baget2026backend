@@ -7,11 +7,11 @@ import java.util.Objects;
 /**
  * Builds the complete unsigned XML envelope for a shift-opening SERVICECHK.
  *
- * <p>The caller must pass the exact bytes of the previous QES-signed Check
- * XML document, including its signature and timestamp, as returned by DPS or
- * originally sent in {@code Check.check_sign}. Pass {@code null} only when
- * DPS confirms that no previous Check exists. Never pass unsigned XML or
- * decode, normalize, or reserialize the signed payload before hashing.</p>
+ * <p>The caller must pass the exact unsigned XML bytes persisted as
+ * {@code prro_operations.signing_input} for the previous fiscalized document.
+ * Pass {@code null} only when DPS confirms that no previous Check exists.
+ * Never pass the CMS signature container from {@code data_sign}, or decode,
+ * normalize, or reserialize the signing input before hashing.</p>
  *
  * <p>This class does not QES-sign the envelope or submit it to DPS.</p>
  */
@@ -38,20 +38,20 @@ public final class PrroShiftOpenEnvelopeBuilder {
      * including the XML declaration expected by the DPS protocol examples.
      *
      * @param document shift-opening DAT fields
-     * @param exactPreviousSignedCheckXml exact previous signed Check XML bytes,
+     * @param exactPreviousSigningInput exact previous unsigned XML signing-input bytes,
      *                                     or null only for the first Check
      */
     public byte[] build(PrroShiftOpenDatBuilder.ShiftOpenDocument document,
-                        byte[] exactPreviousSignedCheckXml) {
+                        byte[] exactPreviousSigningInput) {
         Objects.requireNonNull(document, "document");
-        if (exactPreviousSignedCheckXml != null && exactPreviousSignedCheckXml.length == 0) {
+        if (exactPreviousSigningInput != null && exactPreviousSigningInput.length == 0) {
             throw new IllegalArgumentException(
                     "Previous signed Check XML bytes must not be empty; use null only when no previous check exists");
         }
 
-        String mac = exactPreviousSignedCheckXml == null
+        String mac = exactPreviousSigningInput == null
                 ? ""
-                : PrroPreviousCheckHash.sha256Hex(exactPreviousSignedCheckXml);
+                : PrroPreviousCheckHash.sha256Hex(exactPreviousSigningInput);
         String xml = "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
                 + "<RQ V=\"1\">"
                 + datBuilder.build(document)

@@ -8,8 +8,9 @@ import java.util.Objects;
 
 /**
  * Builds the complete unsigned RQ envelope for a ZREPORT document.
- * The previous document input must be the exact signed bytes returned by DPS
- * in CheckResponse.data_sign. No decoding or XML reserialization is allowed.
+ * The previous document input must be the exact unsigned XML bytes persisted
+ * as signing_input before IIT signing. Do not pass CheckResponse.data_sign,
+ * which contains the signed payload rather than the original signing input.
  */
 @Component
 public final class PrroZReportEnvelopeBuilder {
@@ -27,16 +28,16 @@ public final class PrroZReportEnvelopeBuilder {
         this.canonicalizer = Objects.requireNonNull(canonicalizer, "canonicalizer");
     }
 
-    public byte[] build(String zReportDatXml, byte[] exactPreviousSignedCheckXml) {
+    public byte[] build(String zReportDatXml, byte[] exactPreviousSigningInput) {
         if (zReportDatXml == null || zReportDatXml.isBlank()
                 || !zReportDatXml.startsWith("<DAT>") && !zReportDatXml.startsWith("<DAT ")) {
             throw new IllegalArgumentException("ZREPORT DAT XML must have a DAT root element");
         }
-        if (exactPreviousSignedCheckXml == null || exactPreviousSignedCheckXml.length == 0) {
+        if (exactPreviousSigningInput == null || exactPreviousSigningInput.length == 0) {
             throw new IllegalArgumentException("An open shift must have a previous signed document");
         }
 
-        String previousHash = PrroPreviousCheckHash.sha256Hex(exactPreviousSignedCheckXml);
+        String previousHash = PrroPreviousCheckHash.sha256Hex(exactPreviousSigningInput);
         String xml = "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
                 + "<RQ V=\"1\">"
                 + zReportDatXml

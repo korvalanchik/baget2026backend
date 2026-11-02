@@ -171,12 +171,19 @@ public class PrroShiftOpenPreparationService {
                     "У відповіді infoRro ДПС відсутній податковий номер платника (TN).");
         }
 
-        byte[] previousSignedXml = lastCheck.getDataSign().toByteArray();
-        if (previousSignedXml.length == 0) {
-            previousSignedXml = null;
+        byte[] previousSigningInput = null;
+        if (!lastCheck.getDataSign().isEmpty()) {
+            if (lastCheck.getId() == null || lastCheck.getId().isBlank()) {
+                throw conflict("ДПС повернула попередній документ без фіскального ID. Hash chain не можна побудувати.");
+            }
+            previousSigningInput = operations.getFiscalizedSigningInput(device.id(), lastCheck.getId());
+            if (previousSigningInput == null || previousSigningInput.length == 0) {
+                throw conflict("Попередній документ ДПС відсутній у локальній історії signing_input. "
+                        + "Потрібна звірка документа перед відкриттям зміни.");
+            }
         }
-        String previousHash = previousSignedXml == null
-                ? null : sha256(previousSignedXml);
+        String previousHash = previousSigningInput == null
+                ? null : sha256(previousSigningInput);
 
         PrroOperationService.Operation operation = existing;
         if (operation == null) {
@@ -195,7 +202,7 @@ public class PrroShiftOpenPreparationService {
         byte[] signingInput = envelopeBuilder.build(
                 new PrroShiftOpenDatBuilder.ShiftOpenDocument(
                         device.rroFn(), taxpayerNumber, operation.id(), timestamp),
-                previousSignedXml);
+                previousSigningInput);
         String signingInputHash = sha256(signingInput);
 
         PrroOperationService.PreparedSigningInput stored = operations.storeSigningInput(

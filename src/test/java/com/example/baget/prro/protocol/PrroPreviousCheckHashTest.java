@@ -10,12 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class PrroPreviousCheckHashTest {
 
     @Test
-    void calculatesSha256AsLowercaseHexForExactPreviousCheckBytes() {
-        byte[] previousCheck = "abc".getBytes(StandardCharsets.UTF_8);
+    void calculatesSha256AsLowercaseHexForExactSigningInputBytes() {
+        byte[] signingInput = "abc".getBytes(StandardCharsets.UTF_8);
 
         assertEquals(
                 "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-                PrroPreviousCheckHash.sha256Hex(previousCheck));
+                PrroPreviousCheckHash.sha256Hex(signingInput));
     }
 
     @Test
@@ -27,7 +27,7 @@ class PrroPreviousCheckHashTest {
     }
 
     @Test
-    void hashChangesWhenAnyExactByteChanges() {
+    void hashChangesWhenAnySigningInputByteChanges() {
         assertEquals(false, PrroPreviousCheckHash.sha256Hex(
                         "previous".getBytes(StandardCharsets.UTF_8))
                 .equals(PrroPreviousCheckHash.sha256Hex(
