@@ -104,6 +104,29 @@ class PrroXmlDocumentBuilderTest {
     }
 
     @Test
+    void buildsEmptySoftwarePrroZReportWithoutHardwareSerialNumber() {
+        var document = new PrroXmlDocumentBuilder.ZReportDocument(
+                header("4000318883", "2512702072", "", 2),
+                1,
+                List.of(),
+                List.of(new PrroXmlDocumentBuilder.PaymentTurnover(
+                        PrroXmlDocumentBuilder.PaymentType.CASH, null,
+                        BigDecimal.ZERO.setScale(2), BigDecimal.ZERO.setScale(2))),
+                List.of(new PrroXmlDocumentBuilder.CashMovementSummary(
+                        PrroXmlDocumentBuilder.PaymentType.CASH, null,
+                        BigDecimal.ZERO.setScale(2), BigDecimal.ZERO.setScale(2))),
+                new PrroXmlDocumentBuilder.CheckCounts(0, 0));
+
+        String xml = canonicalizer.canonicalize(builder.buildZReport(document));
+
+        assertTrue(xml.contains("ZN=\"\""));
+        assertTrue(xml.contains("<Z NO=\"1\">"));
+        assertTrue(xml.contains("<M NM=\"Готівка\" SMI=\"0\" SMO=\"0\" T=\"0\"></M>"));
+        assertTrue(xml.contains("<IO NM=\"Готівка\" SMI=\"0\" SMO=\"0\" T=\"0\"></IO>"));
+        assertTrue(xml.contains("<NC NI=\"0\" NO=\"0\"></NC>"));
+    }
+
+    @Test
     void convertsMoneyAndQuantityWithoutRounding() {
         assertEquals(1234, PrroXmlDocumentBuilder.moneyToMinorUnits(new BigDecimal("12.34")));
         assertEquals(1125, PrroXmlDocumentBuilder.quantityToThousandths(new BigDecimal("1.125")));
