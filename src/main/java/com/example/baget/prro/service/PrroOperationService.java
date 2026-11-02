@@ -72,7 +72,7 @@ public class PrroOperationService {
             ensureSubmissionOrder(before);
         }
 
-        int changed = jdbcTemplate.update("""
+        jdbcTemplate.update("""
                 UPDATE prro_operations
                    SET status = ?,
                        signed_document_hash = COALESCE(?, signed_document_hash),
