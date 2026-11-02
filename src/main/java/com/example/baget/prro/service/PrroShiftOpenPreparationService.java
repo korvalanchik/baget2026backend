@@ -15,7 +15,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
@@ -63,7 +62,6 @@ public class PrroShiftOpenPreparationService {
         this.envelopeBuilder = Objects.requireNonNull(envelopeBuilder, "envelopeBuilder");
     }
 
-    @Transactional
     public PreparationResult prepare(PrepareRequest request, Authentication authentication) {
         Objects.requireNonNull(request, "request");
         User user = access.requireOperationalUser(authentication);
@@ -101,7 +99,8 @@ public class PrroShiftOpenPreparationService {
         if (existing != null) {
             if (!"SHIFT_OPEN".equals(existing.sourceType())
                     || !existing.requestHash().equalsIgnoreCase(requestHash)
-                    || !Objects.equals(existing.signerKeyId(), signerKeyId)) {
+                    || !Objects.equals(existing.signerKeyId(), signerKeyId)
+                    || !existing.shiftKey().equals(shiftKey)) {
                 throw conflict("Ключ ідемпотентності вже використано для іншої PRRO-операції.");
             }
             if (existing.status() != PrroOperationService.Status.PREPARED) {
@@ -168,6 +167,11 @@ public class PrroShiftOpenPreparationService {
             operation = operations.prepare(new PrroOperationService.PrepareOperation(
                     device.id(), shiftKey, request.idempotencyKey(), requestHash,
                     "SHIFT_OPEN", null, "SERVICECHK", authentication.getName(), signerKeyId));
+            PrroOperationService.PreparedSigningInput raced =
+                    operations.getPreparedSigningInput(operation.id());
+            if (raced != null) {
+                return result(operation, device, raced);
+            }
         }
 
         LocalDateTime timestamp = LocalDateTime.now(UKRAINE).withNano(0);
