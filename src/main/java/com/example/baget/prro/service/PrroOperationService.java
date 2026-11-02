@@ -188,8 +188,9 @@ public class PrroOperationService {
         if (signingInput == null || signingInput.length == 0) {
             throw new IllegalArgumentException("PRRO signing input must not be empty");
         }
-        if (signingInputHash == null || !SHA_256.matcher(signingInputHash).matches()) {
-            throw new IllegalArgumentException("signingInputHash must be a SHA-256 hex string");
+        if (signingInputHash == null || !SHA_256.matcher(signingInputHash).matches()
+                || !sha256(signingInput).equalsIgnoreCase(signingInputHash)) {
+            throw new IllegalArgumentException("signingInputHash must match the SHA-256 of signingInput");
         }
         if (previousDocumentHash != null && !SHA_256.matcher(previousDocumentHash).matches()) {
             throw new IllegalArgumentException("previousDocumentHash must be a SHA-256 hex string");
@@ -212,12 +213,8 @@ public class PrroOperationService {
             throw new OperationStateConflictException(
                     "Unable to persist signing input for PRRO operation " + operationId);
         }
-        if (changed == 0 && (!java.util.Arrays.equals(stored.bytes(), signingInput)
-                || stored.dpsDateTime() != dpsDateTime
-                || !Objects.equals(stored.previousDocumentHash(), previousDocumentHash))) {
-            throw new IdempotencyConflictException(
-                    "A different signing input is already stored for this PRRO operation");
-        }
+        // If another request with the same idempotency key won the race,
+        // its first persisted payload is authoritative and must be reused.
         return stored;
     }
 
@@ -408,6 +405,15 @@ public class PrroOperationService {
 
     private static String truncate(String value, int maxLength) {
         return value == null || value.length() <= maxLength ? value : value.substring(0, maxLength);
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     private record Device(long id, String environment, boolean enabled, String activeShiftKey,
