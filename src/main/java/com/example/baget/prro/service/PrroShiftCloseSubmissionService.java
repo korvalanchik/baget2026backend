@@ -62,18 +62,20 @@ public class PrroShiftCloseSubmissionService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Тестове закриття дозволене лише для TEST-ПРРО на cabinet.tax.gov.ua:9443.");
         }
+        if (!operation.signerKeyId().equals(request.signerKeyId().trim())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Сертифікат підписувача не відповідає підготовленій операції.");
+        }
+        if (operation.status() != PrroOperationService.Status.PREPARED) {
+            return result(operations.get(operation.id()));
+        }
         if (!Objects.equals(device.activeShiftKey(), operation.shiftKey())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Активна локальна зміна не відповідає підготовленій операції закриття.");
         }
-        if (!Objects.equals(device.activeSignerKeyId(), operation.signerKeyId())
-                || !operation.signerKeyId().equals(request.signerKeyId().trim())) {
+        if (!Objects.equals(device.activeSignerKeyId(), operation.signerKeyId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Сертифікат підписувача не відповідає активній зміні.");
-        }
-
-        if (operation.status() != PrroOperationService.Status.PREPARED) {
-            return result(operations.get(operation.id()));
+                    "Підписувач активної зміни не відповідає підготовленій операції.");
         }
         PrroOperationService.PreparedSigningInput prepared =
                 operations.getPreparedSigningInput(operation.id());
