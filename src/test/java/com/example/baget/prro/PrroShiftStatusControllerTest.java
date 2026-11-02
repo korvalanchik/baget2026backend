@@ -75,8 +75,10 @@ class PrroShiftStatusControllerTest {
     @Test
     void lastCheckReturnsStatusAndDigestOfPreviousCheckDataSign() throws Exception {
         stubDevice(null, null, 1);
-        byte[] previousXml = "<?xml version=\"1.0\"?><RQ V=\"1\"><DAT/></RQ>"
-                .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        byte[] previousXml = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+                + "<RQ V=\"1\"><DAT><C T=\"108\"></C></DAT>"
+                + "<Signature>signed-payload-fixture</Signature>")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
         when(client.getLastCheck(any(CheckRequest.class))).thenReturn(
                 CheckResponse.newBuilder()
                         .setStatus(CheckResponse.Status.OK)
@@ -92,7 +94,8 @@ class PrroShiftStatusControllerTest {
         assertEquals("dps-check-123", response.fiscalDocumentId());
         assertEquals(previousXml.length, response.dataSignLength());
         assertTrue(response.dataSignStartsWithXml());
-        assertEquals(64, response.dataSignSha256().length());
+        assertEquals("197a3b02af8d87acea9303961ef2779d188f1e7511ef746e102d7c89e59886ec",
+                response.dataSignSha256());
         verify(access).requireBranchAccess(user, 7L);
         verify(client).getLastCheck(any(CheckRequest.class));
     }

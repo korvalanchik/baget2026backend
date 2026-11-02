@@ -152,8 +152,10 @@ public class PrroShiftStatusController {
     /**
      * Read-only diagnostic endpoint for the previous fiscal document.
      * DPS documents that lastChk returns the previous check in data_sign.
-     * Only metadata and a digest are returned; the signed document itself is
-     * kept server-side for the subsequent shift-open preparation workflow.
+     * The digest is calculated directly from the raw data_sign bytes, without
+     * decoding or reserializing the signed XML. Only metadata and the digest
+     * are returned to the caller; the signed payload is not exposed by this
+     * diagnostic endpoint.
      */
     @PostMapping("/last-check")
     public LastCheckResponse lastCheck(

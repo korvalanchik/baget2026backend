@@ -11,7 +11,9 @@ This component wraps the shift-opening `DAT` element in the current Electronic C
 
 The official Electronic Cabinet API description states that MAC is the lowercase hexadecimal SHA-256 hash of the previous check. For the first check ever created on a PRRO, MAC is empty. Shift opening uses local number 0 and is sent through `sendChkV2` as `SERVICECHK`.
 
-The builder accepts the exact previous-check XML bytes as returned by the DPS `lastChk` response. It deliberately does not decode, normalize, or reserialize those bytes before hashing. The caller must pass `null` only after confirming that no previous check exists; an empty byte array is rejected.
+**Hash input is the exact previous QES-signed Check XML byte sequence**, including the electronic signature and timestamp. The authoritative source is the previous document returned by DPS in `CheckResponse.data_sign` (or the exact signed payload previously sent in `Check.check_sign`). Do not hash the unsigned XML, decode/re-encode it, normalize it, or serialize it again.
+
+The `/api/prro/shift/last-check` diagnostic reads `data_sign` and calculates its SHA-256 digest from the raw bytes. The response exposes the digest and metadata, not the signed document bytes. The builder accepts the raw signed bytes when used directly; callers must pass `null` only after confirming that DPS has no previous check. An empty byte array is rejected.
 
 ## Safety boundary
 

@@ -32,20 +32,25 @@ class PrroShiftOpenEnvelopeBuilderTest {
     }
 
     @Test
-    void hashesExactPreviousCheckBytesIntoMacAsLowercaseHex() {
+    void hashesExactPreviousSignedCheckXmlBytesIntoMacAsLowercaseHex() {
         var document = new PrroShiftOpenDatBuilder.ShiftOpenDocument(
                 "4538765845", "ПН 345612052809", 239,
                 LocalDateTime.of(2026, 11, 1, 9, 6, 7));
 
-        byte[] previous = "abc".getBytes(StandardCharsets.UTF_8);
-        String actual = new String(builder.build(document, previous), WINDOWS_1251);
+        // Represents the exact signed XML payload returned by DPS data_sign.
+        // The signature and timestamp are part of the bytes being hashed.
+        byte[] previousSignedXml = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+                + "<RQ V=\"1\"><DAT><C T=\"108\"></C></DAT><MAC ID=\"\"></MAC></RQ>"
+                + "<Signature>signed-payload-fixture</Signature>")
+                .getBytes(StandardCharsets.UTF_8);
+        String actual = new String(builder.build(document, previousSignedXml), WINDOWS_1251);
 
         assertEquals(
                 "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
                         + "<RQ V=\"1\">"
                         + "<DAT DI=\"239\" FN=\"4538765845\" TN=\"ПН 345612052809\" V=\"1\" ZN=\"\">"
                         + "<C T=\"108\"></C><TS>20261101090607</TS></DAT>"
-                        + "<MAC ID=\"\">ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</MAC>"
+                        + "<MAC ID=\"\">21f5411785ab8f34c86b9e1dd4e93dad45bcdf61c73e8015fc79be493e8f662c</MAC>"
                         + "</RQ>",
                 actual);
     }
