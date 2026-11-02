@@ -24,8 +24,8 @@ public final class PrroPreviousCheckHash {
     }
 
     public static String sha256Hex(byte[] exactPreviousSigningInput) {
-        if (exactPreviousSignedCheckXml == null || exactPreviousSignedCheckXml.length == 0) {
-            throw new IllegalArgumentException("Previous signed Check XML bytes must not be empty");
+        if (exactPreviousSigningInput == null || exactPreviousSigningInput.length == 0) {
+            throw new IllegalArgumentException("Previous signing-input bytes must not be empty");
         }
         try {
             return HexFormat.of().formatHex(
