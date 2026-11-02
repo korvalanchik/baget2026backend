@@ -1,6 +1,7 @@
 package com.example.baget.prro;
 
 import com.example.baget.prro.client.DpsPrroGrpcClient;
+import com.example.baget.users.User;
 import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
 import com.programika.rro.ws.chk.RroInfoResponse;
@@ -21,14 +22,19 @@ import static org.mockito.Mockito.*;
 class PrroDiagnosticsControllerTest {
     private DpsPrroGrpcClient client;
     private PrroDiagnosticsController controller;
+    private PrroAccessService access;
+    private User adminUser;
     private Authentication admin;
 
     @BeforeEach
     void setUp() {
         client = mock(DpsPrroGrpcClient.class);
-        controller = new PrroDiagnosticsController(client);
+        access = mock(PrroAccessService.class);
+        adminUser = mock(User.class);
+        controller = new PrroDiagnosticsController(client, access);
         admin = mock(Authentication.class);
-        doReturn(List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))).when(admin).getAuthorities();
+        when(access.requireOperationalUser(admin)).thenReturn(adminUser);
+        when(access.isGlobalOperator(adminUser)).thenReturn(true);
     }
 
     @Test
@@ -63,7 +69,9 @@ class PrroDiagnosticsControllerTest {
     @Test
     void refusesNonAdminBeforeCallingDps() {
         Authentication cashier = mock(Authentication.class);
-        doReturn(List.of(new SimpleGrantedAuthority("ROLE_COUNTER"))).when(cashier).getAuthorities();
+        User cashierUser = mock(User.class);
+        when(access.requireOperationalUser(cashier)).thenReturn(cashierUser);
+        when(access.isGlobalOperator(cashierUser)).thenReturn(false);
 
         assertThrows(ResponseStatusException.class, () -> controller.info(
                 new PrroDiagnosticsController.InfoRequest("c2lnbg=="), cashier));

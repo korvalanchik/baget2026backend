@@ -16,7 +16,7 @@ public class CustomerPaymentAccess {
     public User user(Authentication a) {
         if(a==null || !a.isAuthenticated()) throw denied();
         var u=users.findByUsername(a.getName()).orElseThrow(CustomerPaymentAccess::denied);
-        if(u.getRoles().stream().noneMatch(r->Set.of("ROLE_ADMIN","ROLE_MANAGER","ROLE_SELLER","ROLE_LEVEL2","ROLE_COUNTER","ROLE_ACCOUNTANT","ROLE_BOOKKEEPER").contains(r.getName()))) throw denied();
+        if(u.getRoles().stream().noneMatch(r->Set.of("ROLE_ADMIN","ROLE_MANAGER","ROLE_SELLER","ROLE_LEVEL2","ROLE_COUNTER","ROLE_ACCOUNTANT","ROLE_BOOKKEEPER","ROLE_CASHIER").contains(r.getName()))) throw denied();
         return u;
     }
     public boolean admin(User u) { return u.getRoles().stream().anyMatch(r->"ROLE_ADMIN".equals(r.getName())); }
