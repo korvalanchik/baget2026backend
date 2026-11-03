@@ -2,7 +2,6 @@ package com.example.baget.prro.protocol;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
@@ -10,9 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PrroShiftOpenEnvelopeBuilderTest {
-    private static final Charset WINDOWS_1251 = Charset.forName("windows-1251");
-
-    private final PrroShiftOpenEnvelopeBuilder builder = new PrroShiftOpenEnvelopeBuilder();
+        private final PrroShiftOpenEnvelopeBuilder builder = new PrroShiftOpenEnvelopeBuilder();
 
     @Test
     void buildsFirstPrroCheckWithEmptyMac() {
@@ -20,10 +17,10 @@ class PrroShiftOpenEnvelopeBuilderTest {
                 "4538765845", "ПН 345612052809", 238,
                 LocalDateTime.of(2026, 11, 1, 9, 5, 7));
 
-        String actual = new String(builder.build(document, null), WINDOWS_1251);
+        String actual = new String(builder.build(document, null), StandardCharsets.UTF_8);
 
         assertEquals(
-                "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                         + "<RQ V=\"1\">"
                         + "<DAT DI=\"238\" FN=\"4538765845\" TN=\"ПН 345612052809\" V=\"1\" ZN=\"\">"
                         + "<C T=\"108\"></C><TS>20261101090507</TS></DAT>"
@@ -43,7 +40,7 @@ class PrroShiftOpenEnvelopeBuilderTest {
         byte[] previousSignedPayload = "CMS/PKCS7 signed payload fixture".getBytes(StandardCharsets.UTF_8);
         String previousHash = PrroPreviousCheckHash.sha256Hex(previousSigningInput);
         String signedPayloadHash = PrroPreviousCheckHash.sha256Hex(previousSignedPayload);
-        String actual = new String(builder.build(document, previousSigningInput), WINDOWS_1251);
+        String actual = new String(builder.build(document, previousSigningInput), StandardCharsets.UTF_8);
 
         org.junit.jupiter.api.Assertions.assertTrue(
                 actual.contains("<MAC ID=\"\">" + previousHash + "</MAC>"));
