@@ -82,7 +82,7 @@ public final class PrroXmlCanonicalizer {
      * @param xml an XML packet, for example a {@code DAT} packet
      * @return canonical packet bytes encoded as UTF-8, without an XML declaration
      * @throws IllegalArgumentException if the XML is invalid or contains
-     *                                  characters not representable in Windows-1251
+     *                                  characters not representable in UTF-8
      */
     public byte[] canonicalizeToUtf8(String xml) {
         String canonical = canonicalize(xml);
@@ -96,7 +96,7 @@ public final class PrroXmlCanonicalizer {
             return bytes;
         } catch (CharacterCodingException ex) {
             throw new IllegalArgumentException(
-                    "Canonical PRRO XML contains characters not representable in Windows-1251", ex);
+                    "Canonical PRRO XML contains characters not representable in UTF-8", ex);
         }
     }
 
