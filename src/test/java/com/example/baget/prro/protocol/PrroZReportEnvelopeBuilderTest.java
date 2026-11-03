@@ -2,7 +2,6 @@ package com.example.baget.prro.protocol;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -10,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PrroZReportEnvelopeBuilderTest {
     @Test
     void regressionUsesPreviousUnsignedSigningInputHashInsteadOfSignedPayloadHash() {
-        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<RQ V=\"1\"><DAT DI=\"1\"><C T=\"108\"></C></DAT>"
                 + "<MAC ID=\"\"></MAC></RQ>").getBytes(StandardCharsets.UTF_8);
         byte[] previousSignedPayload = "CMS/PKCS7 signed payload fixture".getBytes(StandardCharsets.UTF_8);
