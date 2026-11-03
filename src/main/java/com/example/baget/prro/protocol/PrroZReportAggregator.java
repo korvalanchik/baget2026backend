@@ -292,7 +292,12 @@ public final class PrroZReportAggregator {
         }
 
         private void assertCompatible(TaxMetadata other) {
-            if (!metadata.equals(other)) throw invalid("Tax parameters changed inside the shift for one tax code.");
+            if (metadata.rate().compareTo(other.rate()) != 0
+                    || metadata.additionalRate().compareTo(other.additionalRate()) != 0
+                    || !metadata.included().equals(other.included())
+                    || !metadata.algorithm().equals(other.algorithm())) {
+                throw invalid("Tax parameters changed inside the shift for one tax code.");
+            }
         }
 
         private PrroXmlDocumentBuilder.TaxSummary toSummary() {
