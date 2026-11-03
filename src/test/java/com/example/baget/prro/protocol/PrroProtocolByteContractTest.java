@@ -19,7 +19,7 @@ class PrroProtocolByteContractTest {
     private final PrroXmlCanonicalizer canonicalizer = new PrroXmlCanonicalizer();
 
     @Test
-    void canonicalWindows1251BytesProduceStablePreviousCheckHash() {
+    void canonicalUtf8BytesProduceStablePreviousCheckHash() {
         String xml = """
                 <?xml version="1.0" encoding="windows-1251"?>
                 <DAT FN="1">
@@ -29,19 +29,19 @@ class PrroProtocolByteContractTest {
                 """;
 
         byte[] expectedBytes = "<DAT FN=\"1\"><NM>Хліб</NM><TS>20261025120000</TS></DAT>"
-                .getBytes(CharsetForTests.WINDOWS_1251);
+                .getBytes(StandardCharsets.UTF_8);
 
-        byte[] actualBytes = canonicalizer.canonicalizeToWindows1251(xml);
+        byte[] actualBytes = canonicalizer.canonicalizeToUtf8(xml);
 
         assertArrayEquals(expectedBytes, actualBytes);
         assertEquals(
-                "5c1754c79b58b7d9b8daf14f42e76f8da7eac4be390ef57816474c07a1f1d7be",
+                "039161147a23a816024ac0b436305d441b6b05eb8cb142fe6608848a8352fd8f",
                 PrroPreviousCheckHash.sha256Hex(actualBytes));
     }
 
     @Test
     void hashUsesExactBytesRatherThanReencodingText() {
-        byte[] windows1251Bytes = canonicalizer.canonicalizeToWindows1251(
+        byte[] utf8Bytes = canonicalizer.canonicalizeToWindows1251(
                 "<DAT FN=\"1\"><NM>Хліб</NM><TS>20261025120000</TS></DAT>");
 
         assertEquals(
@@ -49,7 +49,7 @@ class PrroProtocolByteContractTest {
                 PrroPreviousCheckHash.sha256Hex(windows1251Bytes.clone()));
         assertEquals(false, PrroPreviousCheckHash.sha256Hex(windows1251Bytes)
                 .equals(PrroPreviousCheckHash.sha256Hex(
-                        new String(windows1251Bytes, CharsetForTests.WINDOWS_1251)
+                        new String(windows1251Bytes, StandardCharsets.UTF_8)
                                 .getBytes(StandardCharsets.UTF_8))));
     }
 
