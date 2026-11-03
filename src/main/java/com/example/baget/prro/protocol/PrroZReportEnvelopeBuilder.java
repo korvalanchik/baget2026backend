@@ -37,7 +37,7 @@ public final class PrroZReportEnvelopeBuilder {
         }
 
         String previousHash = PrroPreviousCheckHash.sha256Hex(exactPreviousSigningInput);
-        String xml = "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<RQ V=\"1\">"
                 + zReportDatXml
                 + "<MAC ID=\"\">" + previousHash + "</MAC>"
