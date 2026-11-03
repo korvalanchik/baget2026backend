@@ -42,8 +42,8 @@ class PrroXmlCanonicalizerTest {
     @Test
     void normalizesWhitespaceExpandsEmptyElementsAndPreservesAttributeValues() {
         String xml = "<ROOT  z=\"last\" a=\"value with  spaces\">"
-                + "\n  <TEXT>   this   is \t tag value   </TEXT>\n"
-                + "  <EMPTY b=\"2\" a=\"1\" />\n"
+                + "\\n  <TEXT>   this   is \\t tag value   </TEXT>\\n"
+                + "  <EMPTY b=\"2\" a=\"1\" />\\n"
                 + "</ROOT>";
 
         assertEquals(
@@ -55,7 +55,7 @@ class PrroXmlCanonicalizerTest {
     }
 
     @Test
-    void canonicalizesAndEncodesPacketAsWindows1251WithoutXmlDeclaration() {
+    void canonicalizesAndEncodesPacketAsUtf8WithoutXmlDeclaration() {
         String xml = """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <DAT FN="4538765845" TN="ПН 345612052809" ZN="АА57506761" DI="238" V="1">
@@ -66,19 +66,21 @@ class PrroXmlCanonicalizerTest {
                 </DAT>
                 """;
 
-        String expected = """
-                <DAT DI="238" FN="4538765845" TN="ПН 345612052809" V="1" ZN="АА57506761"><C T="0"><P C="120" N="1" NM="Хліб" SM="370" TX="1"></P></C><TS>20110801112601</TS></DAT>
-                """.strip();
+        String expected = "<DAT DI=\"238\" FN=\"4538765845\" TN=\"ПН 345612052809\" V=\"1\" ZN=\"АА57506761\">"
+                + "<C T=\"0\"><P C=\"120\" N=\"1\" NM=\"Хліб\" SM=\"370\" TX=\"1\"></P></C>"
+                + "<TS>20110801112601</TS></DAT>";
         byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
 
         assertArrayEquals(expectedBytes, canonicalizer.canonicalizeToUtf8(xml));
-        assertEquals(expected, new String(expectedBytes, Charset.forName("UTF-8")));
+        assertEquals(expected, new String(expectedBytes, StandardCharsets.UTF_8));
     }
 
     @Test
-    void rejectsCharactersNotRepresentableInWindows1251() {
-        assertThrows(IllegalArgumentException.class,
-                () -> canonicalizer.canonicalizeToUtf8("<DAT>漢</DAT>"));
+    void encodesCyrillicAndExtendedUnicodeAsUtf8() {
+        String xml = "<DAT>Готівка 漢</DAT>";
+        byte[] expected = xml.getBytes(StandardCharsets.UTF_8);
+
+        assertArrayEquals(expected, canonicalizer.canonicalizeToUtf8(xml));
     }
 
     @Test
@@ -99,6 +101,6 @@ class PrroXmlCanonicalizerTest {
 
     @Test
     void rejectsBlankXml() {
-        assertThrows(IllegalArgumentException.class, () -> canonicalizer.canonicalize("  \n"));
+        assertThrows(IllegalArgumentException.class, () -> canonicalizer.canonicalize("  \\n"));
     }
 }
