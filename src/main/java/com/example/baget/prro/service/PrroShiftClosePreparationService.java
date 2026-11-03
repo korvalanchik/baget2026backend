@@ -119,16 +119,16 @@ public class PrroShiftClosePreparationService {
             if (saved != null) return result(existing, device, saved);
         }
 
-        // This first close implementation intentionally supports only the empty test shift.
+        // Until ZREPORT turnover aggregation is implemented, block every fiscalized sale (PAYMENT and TEST).
         Long fiscalizedSales = db.queryForObject("""
                 SELECT COUNT(*)
                   FROM prro_operations
                  WHERE device_id = ? AND shift_key = ?
-                   AND source_type = 'PAYMENT' AND document_type = 'CHK'
+                   AND source_type IN ('PAYMENT', 'TEST') AND document_type = 'CHK'
                    AND status = 'FISCALIZED'
                 """, Long.class, device.id(), device.activeShiftKey());
         if (fiscalizedSales != null && fiscalizedSales > 0) {
-            throw conflict("Поки доступне лише закриття порожньої тестової зміни без продажних чеків.");
+            throw conflict("ZREPORT поки не вміє агрегувати обороти продажних чеків (PAYMENT/TEST). Закриття заблоковано, щоб не сформувати нульовий звіт.");
         }
 
         CheckRequest signedRequest = CheckRequest.newBuilder()
