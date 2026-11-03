@@ -2,7 +2,7 @@ package com.example.baget.prro.protocol;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,7 +15,7 @@ class PrroXmlCanonicalizerTest {
     @Test
     void canonicalizesGeneralPurposeReceiptUsingDpsAppendixAExample() {
         String xml = """
-                <?xml version="1.0" encoding="windows-1251"?>
+                <?xml version="1.0" encoding="UTF-8"?>
                 <DAT FN="4538765845" TN="ПН 345612052809" ZN="АА57506761" DI="238" V="1">
                   <C T="0">
                     <P N="1" C="120" NM="Хліб" SM="370" TX="1"/>
@@ -57,7 +57,7 @@ class PrroXmlCanonicalizerTest {
     @Test
     void canonicalizesAndEncodesPacketAsWindows1251WithoutXmlDeclaration() {
         String xml = """
-                <?xml version="1.0" encoding="windows-1251"?>
+                <?xml version="1.0" encoding="UTF-8"?>
                 <DAT FN="4538765845" TN="ПН 345612052809" ZN="АА57506761" DI="238" V="1">
                   <C T="0">
                     <P N="1" C="120" NM="Хліб" SM="370" TX="1"/>
@@ -69,16 +69,16 @@ class PrroXmlCanonicalizerTest {
         String expected = """
                 <DAT DI="238" FN="4538765845" TN="ПН 345612052809" V="1" ZN="АА57506761"><C T="0"><P C="120" N="1" NM="Хліб" SM="370" TX="1"></P></C><TS>20110801112601</TS></DAT>
                 """.strip();
-        byte[] expectedBytes = expected.getBytes(Charset.forName("windows-1251"));
+        byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
 
-        assertArrayEquals(expectedBytes, canonicalizer.canonicalizeToWindows1251(xml));
-        assertEquals(expected, new String(expectedBytes, Charset.forName("windows-1251")));
+        assertArrayEquals(expectedBytes, canonicalizer.canonicalizeToUtf8(xml));
+        assertEquals(expected, new String(expectedBytes, Charset.forName("UTF-8")));
     }
 
     @Test
     void rejectsCharactersNotRepresentableInWindows1251() {
         assertThrows(IllegalArgumentException.class,
-                () -> canonicalizer.canonicalizeToWindows1251("<DAT>漢</DAT>"));
+                () -> canonicalizer.canonicalizeToUtf8("<DAT>漢</DAT>"));
     }
 
     @Test
