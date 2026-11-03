@@ -137,8 +137,8 @@ public final class PrroZReportAggregator {
 
     private static TaxMetadata metadata(Element element) {
         return new TaxMetadata(decimalAttribute(element, "TXPR"),
-                decimalAttribute(element, "TXSM"), decimalAttribute(element, "DTPR"),
-                decimalAttribute(element, "DTSM"), integerAttribute(element, "TXTY"),
+                moneyMinorAttribute(element, "TXSM"), decimalAttribute(element, "DTPR"),
+                moneyMinorAttribute(element, "DTSM"), integerAttribute(element, "TXTY"),
                 integerAttribute(element, "TXAL"));
     }
 
@@ -245,6 +245,17 @@ public final class PrroZReportAggregator {
         if (!element.hasAttribute(name) || element.getAttribute(name).isBlank()) return BigDecimal.ZERO;
         try { return new BigDecimal(element.getAttribute(name)); }
         catch (NumberFormatException ex) { throw invalid("Invalid decimal XML attribute " + name + "."); }
+    }
+
+    /**
+     * Fiscal XML money attributes are encoded in minor units, just like P.SM and M.SM.
+     * Convert them to UAH before passing values to the ZREPORT document builder.
+     */
+    private static BigDecimal moneyMinorAttribute(Element element, String name) {
+        if (!element.hasAttribute(name) || element.getAttribute(name).isBlank()) {
+            return BigDecimal.ZERO.setScale(2);
+        }
+        return minor(requiredLongAttribute(element, name));
     }
 
     private static Integer integerAttribute(Element element, String name) {
