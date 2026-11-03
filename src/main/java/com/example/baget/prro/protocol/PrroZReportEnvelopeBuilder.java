@@ -3,7 +3,7 @@ package com.example.baget.prro.protocol;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
@@ -14,9 +14,8 @@ import java.util.Objects;
  */
 @Component
 public final class PrroZReportEnvelopeBuilder {
-    private static final Charset WINDOWS_1251 = Charset.forName("windows-1251");
     private static final byte[] XML_DECLARATION =
-            "<?xml version=\"1.0\" encoding=\"windows-1251\"?>".getBytes(WINDOWS_1251);
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>".getBytes(StandardCharsets.UTF_8);
 
     private final PrroXmlCanonicalizer canonicalizer;
 
@@ -44,7 +43,7 @@ public final class PrroZReportEnvelopeBuilder {
                 + "<MAC ID=\"\">" + previousHash + "</MAC>"
                 + "</RQ>";
 
-        byte[] canonicalPacket = canonicalizer.canonicalizeToWindows1251(xml);
+        byte[] canonicalPacket = canonicalizer.canonicalizeToUtf8(xml);
         ByteArrayOutputStream result = new ByteArrayOutputStream(
                 XML_DECLARATION.length + canonicalPacket.length);
         result.writeBytes(XML_DECLARATION);
