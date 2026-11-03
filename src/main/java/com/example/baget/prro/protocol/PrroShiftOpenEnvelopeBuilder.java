@@ -51,7 +51,7 @@ public final class PrroShiftOpenEnvelopeBuilder {
         String mac = exactPreviousSigningInput == null
                 ? ""
                 : PrroPreviousCheckHash.sha256Hex(exactPreviousSigningInput);
-        String xml = "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<RQ V=\"1\">"
                 + datBuilder.build(document)
                 + "<MAC ID=\"\">" + mac + "</MAC>"
