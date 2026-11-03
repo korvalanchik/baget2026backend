@@ -41,10 +41,12 @@ class PrroXmlCanonicalizerTest {
 
     @Test
     void normalizesWhitespaceExpandsEmptyElementsAndPreservesAttributeValues() {
-        String xml = "<ROOT  z=\"last\" a=\"value with  spaces\">"
-                + "\\n  <TEXT>   this   is \\t tag value   </TEXT>\\n"
-                + "  <EMPTY b=\"2\" a=\"1\" />\\n"
-                + "</ROOT>";
+        String xml = """
+                <ROOT  z="last" a="value with  spaces">
+                  <TEXT>   this   is \t tag value   </TEXT>
+                  <EMPTY b="2" a="1" />
+                </ROOT>
+                """;
 
         assertEquals(
                 "<ROOT a=\"value with  spaces\" z=\"last\">"
@@ -101,6 +103,6 @@ class PrroXmlCanonicalizerTest {
 
     @Test
     void rejectsBlankXml() {
-        assertThrows(IllegalArgumentException.class, () -> canonicalizer.canonicalize("  \\n"));
+        assertThrows(IllegalArgumentException.class, () -> canonicalizer.canonicalize("   "));
     }
 }
