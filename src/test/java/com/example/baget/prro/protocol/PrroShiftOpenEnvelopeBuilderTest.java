@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PrroShiftOpenEnvelopeBuilderTest {
-        private final PrroShiftOpenEnvelopeBuilder builder = new PrroShiftOpenEnvelopeBuilder();
+    private final PrroShiftOpenEnvelopeBuilder builder = new PrroShiftOpenEnvelopeBuilder();
 
     @Test
     void buildsFirstPrroCheckWithEmptyMac() {
@@ -34,7 +34,7 @@ class PrroShiftOpenEnvelopeBuilderTest {
                 "4538765845", "ПН 345612052809", 239,
                 LocalDateTime.of(2026, 11, 1, 9, 6, 7));
 
-        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<RQ V=\"1\"><DAT DI=\"238\"><C T=\"108\"></C></DAT>"
                 + "<MAC ID=\"\"></MAC></RQ>").getBytes(StandardCharsets.UTF_8);
         byte[] previousSignedPayload = "CMS/PKCS7 signed payload fixture".getBytes(StandardCharsets.UTF_8);
