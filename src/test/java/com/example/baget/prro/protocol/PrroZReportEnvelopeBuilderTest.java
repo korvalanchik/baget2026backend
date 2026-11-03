@@ -23,9 +23,9 @@ class PrroZReportEnvelopeBuilderTest {
                 + "</Z><TS>20261102220000</TS></DAT>";
 
         byte[] bytes = new PrroZReportEnvelopeBuilder().build(dat, previousSigningInput);
-        String xml = new String(bytes, Charset.forName("windows-1251"));
+        String xml = new String(bytes, StandardCharsets.UTF_8);
 
-        assertTrue(xml.startsWith("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"));
+        assertTrue(xml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
         assertTrue(xml.contains("<RQ V=\"1\">"));
         assertTrue(xml.contains("<MAC ID=\"\">" + previousHash + "</MAC>"));
         assertFalse(xml.contains("<MAC ID=\"\">" + signedPayloadHash + "</MAC>"));
