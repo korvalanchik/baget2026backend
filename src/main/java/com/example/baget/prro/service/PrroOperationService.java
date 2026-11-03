@@ -392,6 +392,7 @@ public class PrroOperationService {
         }
 
         boolean supportedSource = "PAYMENT".equals(command.sourceType())
+                || "TEST".equals(command.sourceType())
                 || "SHIFT_OPEN".equals(command.sourceType())
                 || "SHIFT_CLOSE".equals(command.sourceType())
                 || "SERVICE".equals(command.sourceType());
@@ -401,8 +402,9 @@ public class PrroOperationService {
         if (!supportedSource || !supportedDocument) {
             throw new IllegalArgumentException("Unsupported PRRO source or document type");
         }
-        if ("PAYMENT".equals(command.sourceType()) && !"CHK".equals(command.documentType())) {
-            throw new IllegalArgumentException("PAYMENT operations must use CHK documents");
+        if (("PAYMENT".equals(command.sourceType()) || "TEST".equals(command.sourceType()))
+                && !"CHK".equals(command.documentType())) {
+            throw new IllegalArgumentException("PAYMENT and TEST operations must use CHK documents");
         }
         if ("SHIFT_OPEN".equals(command.sourceType()) && !"SERVICECHK".equals(command.documentType())) {
             throw new IllegalArgumentException("SHIFT_OPEN operations must use SERVICECHK documents");
