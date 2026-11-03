@@ -39,7 +39,7 @@ public final class PrroCheckEnvelopeBuilder {
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<RQ V=\"1\">"
                 + checkDatXml
-                + "<MAC ID=\"\" >".replace(" >", ">") + previousHash + "</MAC>"
+                + "<MAC ID=\"\">" + previousHash + "</MAC>"
                 + "</RQ>";
 
         byte[] canonicalPacket = canonicalizer.canonicalizeToUtf8(xml);
