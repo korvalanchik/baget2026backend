@@ -2,7 +2,6 @@ package com.example.baget.prro.protocol;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -10,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PrroZReportEnvelopeBuilderTest {
     @Test
     void regressionUsesPreviousUnsignedSigningInputHashInsteadOfSignedPayloadHash() {
-        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        byte[] previousSigningInput = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<RQ V=\"1\"><DAT DI=\"1\"><C T=\"108\"></C></DAT>"
                 + "<MAC ID=\"\"></MAC></RQ>").getBytes(StandardCharsets.UTF_8);
         byte[] previousSignedPayload = "CMS/PKCS7 signed payload fixture".getBytes(StandardCharsets.UTF_8);
@@ -24,9 +23,9 @@ class PrroZReportEnvelopeBuilderTest {
                 + "</Z><TS>20261102220000</TS></DAT>";
 
         byte[] bytes = new PrroZReportEnvelopeBuilder().build(dat, previousSigningInput);
-        String xml = new String(bytes, Charset.forName("windows-1251"));
+        String xml = new String(bytes, StandardCharsets.UTF_8);
 
-        assertTrue(xml.startsWith("<?xml version=\"1.0\" encoding=\"windows-1251\"?>"));
+        assertTrue(xml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
         assertTrue(xml.contains("<RQ V=\"1\">"));
         assertTrue(xml.contains("<MAC ID=\"\">" + previousHash + "</MAC>"));
         assertFalse(xml.contains("<MAC ID=\"\">" + signedPayloadHash + "</MAC>"));

@@ -20,7 +20,7 @@ import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
 import java.util.ArrayList;
@@ -68,25 +68,25 @@ public final class PrroXmlCanonicalizer {
     }
 
     /**
-     * Canonicalizes a packet and encodes its bytes using Windows-1251.
+     * Canonicalizes a packet and encodes its bytes using UTF-8.
      *
-     * <p>The protocol's XML examples declare Windows-1251. This method makes
+     * <p>PRRO signing inputs use UTF-8. This method makes
      * the character encoding explicit for protocol-level MAC/hash test vectors;
      * it does not calculate a MAC, add a previous-document hash, create a QES
      * signature, or build the final gRPC {@code Check.check_sign} payload.</p>
      *
-     * <p>Characters that cannot be represented in Windows-1251 are rejected
+     * <p>Characters that cannot be represented in UTF-8 are rejected
      * instead of being silently replaced, because replacement would change the
      * bytes used by any later cryptographic operation.</p>
      *
      * @param xml an XML packet, for example a {@code DAT} packet
-     * @return canonical packet bytes encoded as Windows-1251, without an XML declaration
+     * @return canonical packet bytes encoded as UTF-8, without an XML declaration
      * @throws IllegalArgumentException if the XML is invalid or contains
-     *                                  characters not representable in Windows-1251
+     *                                  characters not representable in UTF-8
      */
-    public byte[] canonicalizeToWindows1251(String xml) {
+    public byte[] canonicalizeToUtf8(String xml) {
         String canonical = canonicalize(xml);
-        CharsetEncoder encoder = Charset.forName("windows-1251").newEncoder()
+        CharsetEncoder encoder = StandardCharsets.UTF_8.newEncoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT);
         try {
@@ -96,7 +96,7 @@ public final class PrroXmlCanonicalizer {
             return bytes;
         } catch (CharacterCodingException ex) {
             throw new IllegalArgumentException(
-                    "Canonical PRRO XML contains characters not representable in Windows-1251", ex);
+                    "Canonical PRRO XML contains characters not representable in UTF-8", ex);
         }
     }
 
