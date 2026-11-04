@@ -4,6 +4,7 @@ import com.example.baget.prro.PrroAccessService;
 import com.example.baget.prro.client.DpsPrroGrpcClient;
 import com.example.baget.prro.config.PrroProperties;
 import com.example.baget.prro.protocol.PrroXmlDocumentBuilder;
+import com.example.baget.prro.protocol.PrroZReportAggregator;
 import com.example.baget.prro.protocol.PrroZReportEnvelopeBuilder;
 import com.example.baget.users.User;
 import com.google.protobuf.ByteString;
@@ -48,18 +49,21 @@ public class PrroShiftClosePreparationService {
     private final PrroProperties properties;
     private final PrroOperationService operations;
     private final PrroZReportEnvelopeBuilder envelopeBuilder;
+    private final PrroZReportAggregator zReportAggregator;
     private final PrroXmlDocumentBuilder documentBuilder = new PrroXmlDocumentBuilder();
 
     public PrroShiftClosePreparationService(PrroAccessService access, JdbcTemplate db,
                                             DpsPrroGrpcClient client, PrroProperties properties,
                                             PrroOperationService operations,
-                                            PrroZReportEnvelopeBuilder envelopeBuilder) {
+                                            PrroZReportEnvelopeBuilder envelopeBuilder,
+                                            PrroZReportAggregator zReportAggregator) {
         this.access = Objects.requireNonNull(access);
         this.db = Objects.requireNonNull(db);
         this.client = Objects.requireNonNull(client);
         this.properties = Objects.requireNonNull(properties);
         this.operations = Objects.requireNonNull(operations);
         this.envelopeBuilder = Objects.requireNonNull(envelopeBuilder);
+        this.zReportAggregator = Objects.requireNonNull(zReportAggregator);
     }
 
     public PreparationResult prepare(PrepareRequest request, Authentication authentication) {
@@ -117,18 +121,6 @@ public class PrroShiftClosePreparationService {
             PrroOperationService.PreparedSigningInput saved =
                     operations.getPreparedSigningInput(existing.id());
             if (saved != null) return result(existing, device, saved);
-        }
-
-        // This first close implementation intentionally supports only the empty test shift.
-        Long fiscalizedSales = db.queryForObject("""
-                SELECT COUNT(*)
-                  FROM prro_operations
-                 WHERE device_id = ? AND shift_key = ?
-                   AND source_type = 'PAYMENT' AND document_type = 'CHK'
-                   AND status = 'FISCALIZED'
-                """, Long.class, device.id(), device.activeShiftKey());
-        if (fiscalizedSales != null && fiscalizedSales > 0) {
-            throw conflict("Поки доступне лише закриття порожньої тестової зміни без продажних чеків.");
         }
 
         CheckRequest signedRequest = CheckRequest.newBuilder()
@@ -203,6 +195,22 @@ public class PrroShiftClosePreparationService {
                     "SHIFT_CLOSE", null, "ZREPORT", authentication.getName(), signerKeyId));
         }
 
+        List<byte[]> fiscalizedCheckInputs = db.query("""
+                SELECT signing_input
+                  FROM prro_operations
+                 WHERE device_id = ? AND shift_key = ?
+                   AND source_type IN ('PAYMENT', 'TEST')
+                   AND document_type = 'CHK' AND status = 'FISCALIZED'
+                 ORDER BY local_number, id
+                """, (rs, rowNum) -> rs.getBytes("signing_input"),
+                device.id(), device.activeShiftKey());
+        final PrroZReportAggregator.Aggregates aggregates;
+        try {
+            aggregates = zReportAggregator.aggregate(fiscalizedCheckInputs);
+        } catch (IllegalArgumentException ex) {
+            throw conflict("Не вдалося безпечно розрахувати підсумки Z-звіту: " + ex.getMessage());
+        }
+
         LocalDateTime timestamp = LocalDateTime.now(UKRAINE).withNano(0);
         long dpsDateTime = Long.parseLong(DPS_DATE_TIME.format(timestamp));
         Long previousReports = db.queryForObject("""
@@ -218,12 +226,10 @@ public class PrroShiftClosePreparationService {
                 new PrroXmlDocumentBuilder.ZReportDocument(
                         header,
                         reportNumber,
-                        List.of(),
-                        List.of(new PrroXmlDocumentBuilder.PaymentTurnover(
-                                PrroXmlDocumentBuilder.PaymentType.CASH, null, ZERO, ZERO)),
-                        List.of(new PrroXmlDocumentBuilder.CashMovementSummary(
-                                PrroXmlDocumentBuilder.PaymentType.CASH, null, ZERO, ZERO)),
-                        new PrroXmlDocumentBuilder.CheckCounts(0, 0));
+                        aggregates.taxSummaries(),
+                        aggregates.paymentTurnovers(),
+                        aggregates.cashMovements(),
+                        aggregates.checkCounts());
         String datXml = documentBuilder.buildZReport(zReport);
         byte[] signingInput = envelopeBuilder.build(datXml, previousSigningInput);
         String signingInputHash = sha256(signingInput);
