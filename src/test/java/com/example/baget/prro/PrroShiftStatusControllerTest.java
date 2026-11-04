@@ -100,6 +100,7 @@ class PrroShiftStatusControllerTest {
         assertTrue(response.dataSignStartsWithXml());
         assertEquals("197a3b02af8d87acea9303961ef2779d188f1e7511ef746e102d7c89e59886ec",
                 response.dataSignSha256());
+        assertEquals(Base64.getEncoder().encodeToString(previousXml), response.dataSignBase64());
         verify(access).requireBranchAccess(user, 7L);
         verify(client).getLastCheck(any(CheckRequest.class));
     }
