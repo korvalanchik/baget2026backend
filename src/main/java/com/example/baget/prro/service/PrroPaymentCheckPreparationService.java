@@ -73,7 +73,7 @@ public class PrroPaymentCheckPreparationService {
 
     public PreparationResult prepare(String paymentRequestKey, PrepareRequest request,
                                      Authentication authentication) {
-        UserContext user = requireUserAndBranch(request, authentication);
+        requireUserAndBranch(request, authentication);
         Device device = findDevice(request.branchNo());
         if (!device.rroFn().equals(request.fiscalNumber().trim())) {
             throw conflict("Фіскальний номер не відповідає ПРРО цієї філії.");
@@ -199,10 +199,9 @@ public class PrroPaymentCheckPreparationService {
         return result(operation, device, stored);
     }
 
-    private UserContext requireUserAndBranch(PrepareRequest request, Authentication authentication) {
+    private void requireUserAndBranch(PrepareRequest request, Authentication authentication) {
         var user = access.requireOperationalUser(authentication);
         access.requireBranchAccess(user, request.branchNo());
-        return new UserContext(user.getUsername());
     }
 
     private Device findDevice(long branchNo) {
@@ -274,5 +273,4 @@ public class PrroPaymentCheckPreparationService {
                                     String previousDocumentSha256) {}
     private record Device(long id, String rroFn, String environment, String activeShiftKey,
                           String activeSignerKeyId) {}
-    private record UserContext(String username) {}
 }
