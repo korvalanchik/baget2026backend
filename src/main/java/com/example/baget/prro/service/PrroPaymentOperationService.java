@@ -18,6 +18,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.math.RoundingMode;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Objects;
 
@@ -150,6 +152,122 @@ public class PrroPaymentOperationService {
         return resolvePayment(requestKey, rows.get(0));
     }
 
+    /**
+     * Returns a payment's fiscal test-check data after independently validating
+     * the saved request, customer transactions, and source ledger entries.
+     * Customer names, phone numbers, and addresses are deliberately not returned.
+     */
+    @Transactional(readOnly = true)
+    public PaymentReceiptSource receiptSource(String paymentRequestKey, long branchNo,
+                                               org.springframework.security.core.Authentication authentication) {
+        User user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
+        List<PaymentRequest> rows = db.query("""
+                SELECT customer_id, branch_no, payload, result
+                  FROM customer_payment_requests
+                 WHERE request_key = ? AND branch_no = ?
+                """, (rs, rowNum) -> new PaymentRequest(rs.getLong("customer_id"),
+                rs.getLong("branch_no"), rs.getString("payload"), rs.getString("result")),
+                paymentRequestKey, branchNo);
+        if (rows.isEmpty()) throw conflict("Платіж не знайдено у вказаній філії");
+        PaymentRequest request = rows.get(0);
+        access.requireCustomerInBranch(user == null ? 0 : request.customerId(), request.branchNo());
+        return receiptSource(paymentRequestKey, request);
+    }
+
+    /** Lists recent eligible own-business cash/bank payments without customer PII. */
+    @Transactional(readOnly = true)
+    public List<RecentPayment> recentPayments(long branchNo,
+                                               org.springframework.security.core.Authentication authentication) {
+        User user = access.requireOperationalUser(authentication);
+        access.requireBranchAccess(user, branchNo);
+        List<RecentRequest> requests = db.query("""
+                SELECT request_key, customer_id, branch_no, payload, result, created_at
+                  FROM customer_payment_requests
+                 WHERE branch_no = ?
+                 ORDER BY created_at DESC
+                 LIMIT 40
+                """, (rs, rowNum) -> new RecentRequest(rs.getString("request_key"),
+                rs.getLong("customer_id"), rs.getLong("branch_no"), rs.getString("payload"),
+                rs.getString("result"), rs.getTimestamp("created_at")), branchNo);
+
+        List<RecentPayment> result = new ArrayList<>();
+        for (RecentRequest item : requests) {
+            try {
+                access.requireCustomerInBranch(user == null ? 0 : item.customerId(), item.branchNo());
+                PaymentReceiptSource source = receiptSource(item.requestKey(),
+                        new PaymentRequest(item.customerId(), item.branchNo(), item.payload(), item.result()));
+                OperationLinkState state = db.query("""
+                        SELECT o.status, o.fiscal_document_id
+                          FROM prro_payment_operation_links l
+                          JOIN prro_operations o ON o.id = l.operation_id
+                         WHERE l.payment_request_key = ?
+                        """, rs -> rs.next()
+                        ? new OperationLinkState(rs.getString("status"), rs.getString("fiscal_document_id"))
+                        : new OperationLinkState("NOT_PREPARED", null), item.requestKey());
+                result.add(new RecentPayment(item.requestKey(), item.createdAt() == null
+                        ? "" : item.createdAt().toInstant().toString(), source.documentLabel(),
+                        source.amount(), source.paymentName(), state.status(), state.fiscalDocumentId()));
+            } catch (ResponseStatusException | IllegalArgumentException ignored) {
+                // Skip reversals, advance-only allocations, partner/non-cash
+                // references, stale requests, and records that cannot be tied
+                // unambiguously to a single incoming ledger transaction.
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private PaymentReceiptSource receiptSource(String paymentRequestKey, PaymentRequest request) {
+        Payment payment = resolvePayment(paymentRequestKey, request);
+        if (payment.receivedAmount().signum() <= 0) {
+            throw conflict("Немає нового надходження коштів для тестового чека.");
+        }
+
+        JsonNode payload;
+        try {
+            payload = json.readTree(request.payload());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Не вдалося прочитати параметри платежу", ex);
+        }
+
+        String accountKind = db.query("""
+                SELECT kind FROM cash_accounts WHERE id = ?
+                """, rs -> rs.next() ? rs.getString(1) : null, payment.cashAccountId());
+        if (accountKind == null || (!"BRANCH_CASH".equals(accountKind)
+                && !"CENTRAL_CASH".equals(accountKind) && !"BANK".equals(accountKind))) {
+            throw conflict("Джерело надходження не є касою або банківським рахунком підприємства.");
+        }
+
+        Long invoiceId = payload.hasNonNull("invoiceId") ? payload.path("invoiceId").asLong() : null;
+        String documentLabel;
+        if (invoiceId != null) {
+            List<String> invoiceNumbers = db.query("""
+                    SELECT CAST(invoice_no AS CHAR)
+                      FROM invoices
+                     WHERE id = ? AND customer_id = ?
+                    """, (rs, rowNum) -> rs.getString(1), invoiceId, request.customerId());
+            if (invoiceNumbers.isEmpty()) {
+                throw conflict("Рахунок цього платежу не знайдено для його клієнта.");
+            }
+            documentLabel = "Оплата рахунку №" + invoiceNumbers.get(0);
+        } else {
+            documentLabel = "Аванс клієнта";
+        }
+
+        BigDecimal amount;
+        try {
+            amount = payment.receivedAmount().setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException ex) {
+            throw conflict("Сума нового надходження має містити не більше двох знаків після коми.");
+        }
+
+        boolean cash = "BRANCH_CASH".equals(accountKind) || "CENTRAL_CASH".equals(accountKind);
+        return new PaymentReceiptSource(paymentRequestKey, request.branchNo(), payment.cashAccountId(),
+                amount, invoiceId, documentLabel, cash ? "CASH" : "OTHER",
+                cash ? "Готівка" : "Безготівкова оплата");
+    }
+
     private Payment resolvePayment(String requestKey, PaymentRequest request) {
         try {
             JsonNode payload = json.readTree(request.payload());
@@ -251,6 +369,15 @@ public class PrroPaymentOperationService {
 
     public record PaymentOperationView(String paymentRequestKey, Long operationId, String status,
                                        boolean alreadyLinked, String message) {}
+    public record PaymentReceiptSource(String paymentRequestKey, long branchNo, long cashAccountId,
+                                       BigDecimal amount, Long invoiceId, String documentLabel,
+                                       String paymentType, String paymentName) {}
+    public record RecentPayment(String paymentRequestKey, String createdAt, String documentLabel,
+                                BigDecimal amount, String paymentName, String operationStatus,
+                                String fiscalDocumentId) {}
+    private record RecentRequest(String requestKey, long customerId, long branchNo,
+                                 String payload, String result, Timestamp createdAt) {}
+    private record OperationLinkState(String status, String fiscalDocumentId) {}
     private record PaymentRequest(long customerId, long branchNo, String payload, String result) {}
     private record IncomingTransaction(long id, BigDecimal amount, long ledgerId,
                                        long cashAccountId, BigDecimal ledgerAmount) {}
