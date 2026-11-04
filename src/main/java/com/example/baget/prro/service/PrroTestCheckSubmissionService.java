@@ -38,11 +38,26 @@ public class PrroTestCheckSubmissionService {
     }
 
     public SubmissionResult submit(SubmitRequest request, Authentication authentication) {
+        return submit(request, "TEST", null, authentication);
+    }
+
+    public SubmissionResult submitPayment(String paymentRequestKey, SubmitRequest request,
+                                          Authentication authentication) {
+        if (paymentRequestKey == null || paymentRequestKey.isBlank() || paymentRequestKey.length() > 36) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некоректний ключ платежу.");
+        }
+        return submit(request, "PAYMENT", paymentRequestKey, authentication);
+    }
+
+    private SubmissionResult submit(SubmitRequest request, String expectedSource,
+                                    String expectedPaymentRequestKey, Authentication authentication) {
         var user = access.requireOperationalUser(authentication);
         var operation = operations.get(request.operationId());
-        if (!"TEST".equals(operation.sourceType()) || !"CHK".equals(operation.documentType())) {
+        if (!expectedSource.equals(operation.sourceType()) || !"CHK".equals(operation.documentType())
+                || (expectedPaymentRequestKey != null
+                && !expectedPaymentRequestKey.equals(operation.sourceReference()))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Операція не є тестовим продажним чеком CHK.");
+                    "PRRO-операція не відповідає джерелу платежу або документу CHK.");
         }
 
         Device device = db.query("""
