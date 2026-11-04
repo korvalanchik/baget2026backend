@@ -53,7 +53,11 @@ class PrroShiftStatusControllerTest {
         stubDevice(null, null, 1);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
-                        .setStatusRro(1).setOpenShift(false).setOnline(true).build());
+                        .setStatusRro(1).setOpenShift(false).setOnline(true)
+                        .addOperators(RroInfoResponse.Operator.newBuilder()
+                                .setSerial("operator-serial").setStatus(1).setSenior(false)
+                                .setIsname("Cashier").build())
+                        .build());
         when(client.getRroStatus(any(CheckRequest.class))).thenReturn(
                 StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
                         .setOpenShift(false).setOnline(true).build());
@@ -124,7 +128,11 @@ class PrroShiftStatusControllerTest {
         stubDevice("shift-1", "operator-serial", 1);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
-                        .setStatusRro(1).setOpenShift(true).setOnline(true).build());
+                        .setStatusRro(1).setOpenShift(true).setOnline(true)
+                        .addOperators(RroInfoResponse.Operator.newBuilder()
+                                .setSerial("operator-serial").setStatus(1).setSenior(true)
+                                .setIsname("Senior cashier").build())
+                        .build());
         when(client.getRroStatus(any(CheckRequest.class))).thenReturn(
                 StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
                         .setOpenShift(true).setOnline(true).setLastSigner("operator-serial").build());
@@ -136,10 +144,57 @@ class PrroShiftStatusControllerTest {
         assertTrue(response.dpsOpenShift());
         assertTrue(response.localShiftPrepared());
         assertTrue(response.localSignerBound());
+        assertEquals("operator-serial", response.activeSignerKeyId());
+        assertEquals(1, response.operators().size());
+        assertEquals("Senior cashier", response.operators().get(0).name());
+        assertTrue(response.operators().get(0).senior());
         assertEquals(9L, response.deviceId());
         verify(access).requireBranchAccess(user, 7L);
         verify(client).getRroInfo(any(CheckRequest.class));
         verify(client).getRroStatus(any(CheckRequest.class));
+    }
+
+    @Test
+    void reportsRegisteredOperatorsForClosedShiftWithoutAdminDiagnostics() throws Exception {
+        stubDevice(null, null, 1);
+        when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
+                RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
+                        .setStatusRro(1).setOpenShift(false).setOnline(true)
+                        .addOperators(RroInfoResponse.Operator.newBuilder()
+                                .setSerial("cashier-serial").setStatus(1).setIsname("Cashier").build())
+                        .build());
+        when(client.getRroStatus(any(CheckRequest.class))).thenReturn(
+                StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
+                        .setOpenShift(false).setOnline(true).build());
+
+        var response = controller.status(new PrroShiftStatusController.ShiftStatusRequest(
+                7L, "4000318883", Base64.getEncoder().encodeToString(new byte[]{1})), authentication);
+
+        assertEquals("CLOSED", response.state());
+        assertNull(response.activeSignerKeyId());
+        assertEquals(1, response.operators().size());
+        assertEquals("cashier-serial", response.operators().get(0).serial());
+        assertEquals("Cashier", response.operators().get(0).name());
+    }
+
+    @Test
+    void reportsReconciliationWhenDpsLastSignerDiffersFromLocalShiftSigner() throws Exception {
+        stubDevice("shift-1", "operator-serial", 1);
+        when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
+                RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
+                        .setStatusRro(1).setOpenShift(true).setOnline(true)
+                        .addOperators(RroInfoResponse.Operator.newBuilder()
+                                .setSerial("operator-serial").setStatus(1).build())
+                        .build());
+        when(client.getRroStatus(any(CheckRequest.class))).thenReturn(
+                StatusResponse.newBuilder().setStatus(StatusResponse.Status.OK)
+                        .setOpenShift(true).setOnline(true).setLastSigner("another-operator").build());
+
+        var response = controller.status(new PrroShiftStatusController.ShiftStatusRequest(
+                7L, "4000318883", Base64.getEncoder().encodeToString(new byte[]{1})), authentication);
+
+        assertEquals("RECONCILIATION_REQUIRED", response.state());
+        assertEquals("operator-serial", response.activeSignerKeyId());
     }
 
     @Test
