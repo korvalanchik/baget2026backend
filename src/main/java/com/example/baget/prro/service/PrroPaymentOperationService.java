@@ -171,7 +171,7 @@ public class PrroPaymentOperationService {
                 paymentRequestKey, branchNo);
         if (rows.isEmpty()) throw conflict("Платіж не знайдено у вказаній філії");
         PaymentRequest request = rows.get(0);
-        access.requireCustomerInBranch(user == null ? 0 : request.customerId(), request.branchNo());
+        access.requireCustomerInBranch(request.customerId(), request.branchNo());
         return receiptSource(paymentRequestKey, request);
     }
 
@@ -194,7 +194,7 @@ public class PrroPaymentOperationService {
         List<RecentPayment> result = new ArrayList<>();
         for (RecentRequest item : requests) {
             try {
-                access.requireCustomerInBranch(user == null ? 0 : item.customerId(), item.branchNo());
+                access.requireCustomerInBranch(item.customerId(), item.branchNo());
                 PaymentReceiptSource source = receiptSource(item.requestKey(),
                         new PaymentRequest(item.customerId(), item.branchNo(), item.payload(), item.result()));
                 OperationLinkState state = db.query("""
