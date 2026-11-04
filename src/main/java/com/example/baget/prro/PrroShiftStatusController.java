@@ -115,11 +115,24 @@ public class PrroShiftStatusController {
 
         boolean localShiftPrepared = device.activeShiftKey() != null
                 && !device.activeShiftKey().isBlank();
+        String activeSignerKeyId = device.activeSignerKeyId();
+        boolean localSignerBound = activeSignerKeyId != null && !activeSignerKeyId.isBlank();
         boolean dpsInfoOk = info.getStatus() == RroInfoResponse.Status.OK;
         boolean dpsStatusOk = status.getStatus() == StatusResponse.Status.OK;
+        boolean dpsSignerMatches = !status.getOpenShift()
+                || localSignerBound
+                && activeSignerKeyId.equalsIgnoreCase(status.getLastSigner())
+                && info.getOperatorsList().stream().anyMatch(operator ->
+                activeSignerKeyId.equalsIgnoreCase(operator.getSerial()) && operator.getStatus() == 1);
         boolean stateMatches = dpsInfoOk && dpsStatusOk
                 && info.getOpenShift() == status.getOpenShift()
-                && localShiftPrepared == status.getOpenShift();
+                && localShiftPrepared == status.getOpenShift()
+                && dpsSignerMatches;
+
+        List<OperatorView> operators = info.getOperatorsList().stream()
+                .map(operator -> new OperatorView(operator.getSerial(), operator.getStatus(),
+                        operator.getSenior(), operator.getIsname()))
+                .toList();
 
         String state;
         if (!dpsInfoOk || !dpsStatusOk) {
@@ -143,9 +156,11 @@ public class PrroShiftStatusController {
                 status.getOnline(),
                 status.getOpenShift(),
                 localShiftPrepared,
-                device.activeSignerKeyId() != null && !device.activeSignerKeyId().isBlank(),
+                localSignerBound,
                 device.nextLocalNumber(),
+                localSignerBound ? activeSignerKeyId : null,
                 status.getLastSigner(),
+                operators,
                 status.getErrorMessage());
     }
 
@@ -269,6 +284,8 @@ public class PrroShiftStatusController {
     private record Device(long id, String rroFn, String displayName, String environment,
                           String activeShiftKey, String activeSignerKeyId, int nextLocalNumber) {}
 
+    public record OperatorView(String serial, int status, boolean senior, String name) {}
+
     public record ShiftStatusResponse(
             long branchNo,
             long deviceId,
@@ -284,6 +301,8 @@ public class PrroShiftStatusController {
             boolean localShiftPrepared,
             boolean localSignerBound,
             int nextLocalNumber,
+            String activeSignerKeyId,
             String lastSigner,
+            List<OperatorView> operators,
             String dpsMessage) {}
 }
