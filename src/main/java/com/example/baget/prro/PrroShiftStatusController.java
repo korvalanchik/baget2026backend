@@ -243,6 +243,7 @@ public class PrroShiftStatusController {
                 previousCheck.length,
                 previousCheck.length > 0 && startsWithXml(previousCheck),
                 previousCheck.length == 0 ? null : sha256(previousCheck),
+                previousCheck.length == 0 ? null : Base64.getEncoder().encodeToString(previousCheck),
                 response.getErrorMessage());
     }
 
@@ -274,6 +275,7 @@ public class PrroShiftStatusController {
             int dataSignLength,
             boolean dataSignStartsWithXml,
             String dataSignSha256,
+            String dataSignBase64,
             String dpsMessage) {}
 
     public record ShiftStatusRequest(
