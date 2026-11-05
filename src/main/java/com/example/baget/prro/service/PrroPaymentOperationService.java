@@ -354,9 +354,6 @@ public class PrroPaymentOperationService {
                     name.append(", ").append(formatDimension(dimensions.widthMm()))
                             .append(" × ").append(formatDimension(dimensions.heightMm())).append(" мм");
                 }
-                if (dimensions != null && dimensions.quantity() > 1) {
-                    name.append(", кількість ").append(dimensions.quantity()).append(" шт.");
-                }
                 name.append(')');
                 result.add(new ReceiptLineDraft(name.toString(), orderShares.get(index)));
             }
@@ -377,9 +374,8 @@ public class PrroPaymentOperationService {
                     if (source.isObject() && source.hasNonNull("widthMm") && source.hasNonNull("heightMm")) {
                         BigDecimal width = source.path("widthMm").decimalValue();
                         BigDecimal height = source.path("heightMm").decimalValue();
-                        int quantity = Math.max(1, source.path("productQuantity").asInt(1));
                         if (width.signum() > 0 && height.signum() > 0) {
-                            return new ProductDimensions(width, height, quantity);
+                            return new ProductDimensions(width, height);
                         }
                     }
                 }
@@ -390,7 +386,7 @@ public class PrroPaymentOperationService {
                 BigDecimal width = form.path("widthMm").decimalValue();
                 BigDecimal height = form.path("heightMm").decimalValue();
                 if (width.signum() > 0 && height.signum() > 0) {
-                    return new ProductDimensions(width, height, Math.max(1, form.path("productQuantity").asInt(1)));
+                    return new ProductDimensions(width, height);
                 }
             }
         } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
@@ -574,7 +570,7 @@ public class PrroPaymentOperationService {
                                 BigDecimal amount, String paymentName, String operationStatus,
                                 String fiscalDocumentId) {}
     private record ReceiptLineDraft(String name, BigDecimal weight) {}
-    private record ProductDimensions(BigDecimal widthMm, BigDecimal heightMm, int quantity) {}
+    private record ProductDimensions(BigDecimal widthMm, BigDecimal heightMm) {}
     private record InvoiceOrderProductRow(long orderNo, BigDecimal invoiceOrderAmount,
                                           Long productId, BigDecimal productTotal, String configuration) {}
     private record AllocationPart(int index, long kopecs, BigDecimal fraction) {}
