@@ -179,16 +179,27 @@ public class PrroPaymentCheckPreparationService {
                 "CASH".equals(source.paymentType())
                         ? PrroXmlDocumentBuilder.PaymentType.CASH
                         : PrroXmlDocumentBuilder.PaymentType.OTHER;
+        List<PrroXmlDocumentBuilder.SaleItem> receiptItems = new java.util.ArrayList<>();
+        int operationNumber = 1;
+        for (PrroPaymentOperationService.ReceiptItem item : source.items()) {
+            receiptItems.add(new PrroXmlDocumentBuilder.SaleItem(
+                    operationNumber++, null, item.name(), item.amount(),
+                    BigDecimal.ONE, null, TEST_TAX_CODE, null));
+        }
+        if (receiptItems.isEmpty()) {
+            throw conflict("У рахунку не знайдено позицій для формування тестового чека.");
+        }
+
+        int paymentOperationNumber = operationNumber++;
+        int closingOperationNumber = operationNumber;
         PrroXmlDocumentBuilder.CheckDocument check = new PrroXmlDocumentBuilder.CheckDocument(
                 header,
                 PrroXmlDocumentBuilder.ReceiptType.SALE,
-                List.of(new PrroXmlDocumentBuilder.SaleItem(
-                        1, null, source.documentLabel(), source.amount(),
-                        BigDecimal.ONE, null, TEST_TAX_CODE, null)),
+                receiptItems,
                 List.of(new PrroXmlDocumentBuilder.Payment(
-                        2, paymentType, source.paymentName(), source.amount())),
+                        paymentOperationNumber, paymentType, source.paymentName(), source.amount())),
                 new PrroXmlDocumentBuilder.ReceiptClosing(
-                        3, operation.localNumber(), source.amount(), source.amount(), null,
+                        closingOperationNumber, operation.localNumber(), source.amount(), source.amount(), null,
                         List.of(new PrroXmlDocumentBuilder.TaxBreakdown(
                                 TEST_TAX_CODE, null, null, null, null, null, null))));
 
