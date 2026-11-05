@@ -320,9 +320,11 @@ public class PrroPaymentOperationService {
             if (products.isEmpty()) {
                 // Legacy orders may not have an order_products snapshot. Keep
                 // the order identifiable rather than inventing dimensions.
+                BigDecimal legacyWeight = invoiceOrderAmount == null || invoiceOrderAmount.signum() <= 0
+                        ? BigDecimal.ONE : invoiceOrderAmount;
                 result.add(new ReceiptLineDraft(
                         "Виготовлення багетної рами (Замовлення №" + orderNo + ")",
-                        invoiceOrderAmount.signum() > 0 ? invoiceOrderAmount : BigDecimal.ONE));
+                        legacyWeight));
                 continue;
             }
 
@@ -388,7 +390,7 @@ public class PrroPaymentOperationService {
                 BigDecimal width = form.path("widthMm").decimalValue();
                 BigDecimal height = form.path("heightMm").decimalValue();
                 if (width.signum() > 0 && height.signum() > 0) {
-                    return new ProductDimensions(width, height);
+                    return new ProductDimensions(width, height, Math.max(1, form.path("productQuantity").asInt(1)));
                 }
             }
         } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
