@@ -17,10 +17,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -241,6 +244,7 @@ public class PrroPaymentOperationService {
 
         Long invoiceId = payload.hasNonNull("invoiceId") ? payload.path("invoiceId").asLong() : null;
         String documentLabel;
+        List<ReceiptItem> items;
         if (invoiceId != null) {
             List<String> invoiceNumbers = db.query("""
                     SELECT CAST(invoice_no AS CHAR)
@@ -250,9 +254,19 @@ public class PrroPaymentOperationService {
             if (invoiceNumbers.isEmpty()) {
                 throw conflict("Рахунок цього платежу не знайдено для його клієнта.");
             }
-            documentLabel = "Оплата рахунку №" + invoiceNumbers.get(0);
+            String invoiceNumber = invoiceNumbers.get(0);
+            List<ReceiptLineDraft> lines = invoiceReceiptLines(invoiceId, invoiceNumber);
+            if (lines.isEmpty()) {
+                lines = List.of(new ReceiptLineDraft(
+                        "Виготовлення багетної рами (Рахунок №" + invoiceNumber + ")",
+                        BigDecimal.ONE));
+            }
+            documentLabel = "Рахунок №" + invoiceNumber + " · " + lines.size()
+                    + (lines.size() == 1 ? " виріб" : " вироби");
+            items = materializeReceiptItems(lines, payment.receivedAmount());
         } else {
             documentLabel = "Аванс клієнта";
+            items = List.of(new ReceiptItem(documentLabel, payment.receivedAmount()));
         }
 
         BigDecimal amount;
@@ -264,8 +278,183 @@ public class PrroPaymentOperationService {
 
         boolean cash = "BRANCH_CASH".equals(accountKind) || "CENTRAL_CASH".equals(accountKind);
         return new PaymentReceiptSource(paymentRequestKey, request.branchNo(), payment.cashAccountId(),
-                amount, invoiceId, documentLabel, cash ? "CASH" : "OTHER",
+                amount, invoiceId, documentLabel, items, cash ? "CASH" : "OTHER",
                 cash ? "Готівка" : "Безготівкова оплата");
+    }
+
+    /**
+     * Builds one receipt line per physical Baget product in every order attached
+     * to this invoice. The JSON snapshot is the same immutable draft that was
+     * used to calculate and save the order.
+     */
+    private List<ReceiptLineDraft> invoiceReceiptLines(Long invoiceId, String invoiceNumber) {
+        List<InvoiceOrderProductRow> rows = db.query("""
+                SELECT io.order_no, io.amount AS invoice_order_amount,
+                       op.id AS product_id, op.total AS product_total,
+                       op.configuration
+                  FROM invoice_orders io
+                  LEFT JOIN order_products op
+                    ON op.order_no = io.order_no AND op.active = TRUE
+                 WHERE io.invoice_id = ?
+                 ORDER BY io.order_no, op.id
+                """, (rs, rowNum) -> new InvoiceOrderProductRow(
+                rs.getLong("order_no"), rs.getBigDecimal("invoice_order_amount"),
+                rs.getObject("product_id") == null ? null : rs.getLong("product_id"),
+                rs.getBigDecimal("product_total"), rs.getString("configuration")), invoiceId);
+
+        if (rows.isEmpty()) return List.of();
+
+        Map<Long, List<InvoiceOrderProductRow>> byOrder = new LinkedHashMap<>();
+        for (InvoiceOrderProductRow row : rows) {
+            byOrder.computeIfAbsent(row.orderNo(), ignored -> new ArrayList<>()).add(row);
+        }
+
+        List<ReceiptLineDraft> result = new ArrayList<>();
+        for (Map.Entry<Long, List<InvoiceOrderProductRow>> entry : byOrder.entrySet()) {
+            long orderNo = entry.getKey();
+            List<InvoiceOrderProductRow> products = entry.getValue().stream()
+                    .filter(row -> row.productId() != null)
+                    .toList();
+            BigDecimal invoiceOrderAmount = entry.getValue().get(0).invoiceOrderAmount();
+
+            if (products.isEmpty()) {
+                // Legacy orders may not have an order_products snapshot. Keep
+                // the order identifiable rather than inventing dimensions.
+                BigDecimal legacyWeight = invoiceOrderAmount == null || invoiceOrderAmount.signum() <= 0
+                        ? BigDecimal.ONE : invoiceOrderAmount;
+                result.add(new ReceiptLineDraft(
+                        "Виготовлення багетної рами (Замовлення №" + orderNo + ")",
+                        legacyWeight));
+                continue;
+            }
+
+            BigDecimal productsTotal = products.stream()
+                    .map(row -> row.productTotal() == null ? BigDecimal.ZERO : row.productTotal())
+                    .filter(value -> value.signum() > 0)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            List<BigDecimal> productWeights = new ArrayList<>();
+            for (InvoiceOrderProductRow product : products) {
+                BigDecimal weight = product.productTotal();
+                productWeights.add(weight == null || weight.signum() <= 0
+                        ? (productsTotal.signum() > 0 ? BigDecimal.ZERO : BigDecimal.ONE)
+                        : weight);
+            }
+            if (invoiceOrderAmount == null || invoiceOrderAmount.signum() <= 0) {
+                invoiceOrderAmount = productsTotal.signum() > 0 ? productsTotal : BigDecimal.valueOf(products.size());
+            }
+            List<BigDecimal> orderShares = allocateProportionally(invoiceOrderAmount, productWeights);
+
+            for (int index = 0; index < products.size(); index++) {
+                InvoiceOrderProductRow product = products.get(index);
+                ProductDimensions dimensions = readDimensions(product.configuration());
+                StringBuilder name = new StringBuilder("Виготовлення багетної рами")
+                        .append(" (Замовлення №").append(orderNo)
+                        .append(", виріб №").append(index + 1);
+                if (dimensions != null && dimensions.widthMm() != null && dimensions.heightMm() != null) {
+                    name.append(", ").append(formatDimension(dimensions.widthMm()))
+                            .append(" × ").append(formatDimension(dimensions.heightMm())).append(" мм");
+                }
+                name.append(')');
+                result.add(new ReceiptLineDraft(name.toString(), orderShares.get(index)));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private ProductDimensions readDimensions(String configuration) {
+        if (configuration == null || configuration.isBlank()) return null;
+        try {
+            JsonNode root = json.readTree(configuration);
+            JsonNode draft = root.path("draft");
+            JsonNode components = draft.path("components");
+            if (components.isArray()) {
+                for (JsonNode component : components) {
+                    JsonNode source = component.path("product");
+                    if (!source.isObject()) source = component.path("mounting");
+                    if (source.isObject() && source.hasNonNull("widthMm") && source.hasNonNull("heightMm")) {
+                        BigDecimal width = source.path("widthMm").decimalValue();
+                        BigDecimal height = source.path("heightMm").decimalValue();
+                        if (width.signum() > 0 && height.signum() > 0) {
+                            return new ProductDimensions(width, height);
+                        }
+                    }
+                }
+            }
+            // A defensive fallback for older configuration snapshots.
+            JsonNode form = draft.path("form");
+            if (form.hasNonNull("widthMm") && form.hasNonNull("heightMm")) {
+                BigDecimal width = form.path("widthMm").decimalValue();
+                BigDecimal height = form.path("heightMm").decimalValue();
+                if (width.signum() > 0 && height.signum() > 0) {
+                    return new ProductDimensions(width, height);
+                }
+            }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+            // A malformed or legacy snapshot must not prevent a receipt from
+            // identifying the order and product number.
+        }
+        return null;
+    }
+
+    private static String formatDimension(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    private static List<ReceiptItem> materializeReceiptItems(List<ReceiptLineDraft> lines,
+                                                              BigDecimal totalAmount) {
+        List<BigDecimal> amounts = allocateProportionally(totalAmount,
+                lines.stream().map(ReceiptLineDraft::weight).toList());
+        List<ReceiptItem> result = new ArrayList<>();
+        for (int index = 0; index < lines.size(); index++) {
+            result.add(new ReceiptItem(lines.get(index).name(), amounts.get(index)));
+        }
+        return List.copyOf(result);
+    }
+
+    /**
+     * Allocates integer kopecks proportionally, using largest remainders so
+     * that every line is rounded to 2 decimals and the sum remains exact.
+     */
+    static List<BigDecimal> allocateProportionally(BigDecimal total, List<BigDecimal> weights) {
+        if (total == null || total.signum() < 0 || weights == null || weights.isEmpty()) {
+            throw new IllegalArgumentException("A non-negative total and at least one weight are required");
+        }
+        long totalKopecks = total.movePointRight(2)
+                .setScale(0, RoundingMode.UNNECESSARY).longValueExact();
+        List<BigDecimal> normalized = weights.stream()
+                .map(weight -> weight == null || weight.signum() < 0 ? BigDecimal.ZERO : weight)
+                .toList();
+        BigDecimal weightTotal = normalized.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (weightTotal.signum() == 0) {
+            normalized = weights.stream().map(ignored -> BigDecimal.ONE).toList();
+            weightTotal = BigDecimal.valueOf(normalized.size());
+        }
+
+        List<AllocationPart> parts = new ArrayList<>();
+        long allocatedKopecks = 0;
+        for (int index = 0; index < normalized.size(); index++) {
+            BigDecimal exact = BigDecimal.valueOf(totalKopecks).multiply(normalized.get(index))
+                    .divide(weightTotal, 24, RoundingMode.DOWN);
+            long whole = exact.setScale(0, RoundingMode.DOWN).longValueExact();
+            allocatedKopecks += whole;
+            parts.add(new AllocationPart(index, whole, exact.subtract(BigDecimal.valueOf(whole))));
+        }
+
+        long remainder = totalKopecks - allocatedKopecks;
+        List<AllocationPart> ranked = parts.stream()
+                .sorted(Comparator.comparing(AllocationPart::fraction).reversed()
+                        .thenComparingInt(AllocationPart::index))
+                .toList();
+        long[] result = new long[parts.size()];
+        for (AllocationPart part : parts) result[part.index()] = part.kopecs();
+        for (int index = 0; index < remainder; index++) {
+            AllocationPart part = ranked.get(index);
+            result[part.index()]++;
+        }
+
+        List<BigDecimal> amounts = new ArrayList<>();
+        for (long value : result) amounts.add(BigDecimal.valueOf(value, 2));
+        return List.copyOf(amounts);
     }
 
     private Payment resolvePayment(String requestKey, PaymentRequest request) {
@@ -369,12 +558,22 @@ public class PrroPaymentOperationService {
 
     public record PaymentOperationView(String paymentRequestKey, Long operationId, String status,
                                        boolean alreadyLinked, String message) {}
+    public record ReceiptItem(String name, BigDecimal amount) {}
     public record PaymentReceiptSource(String paymentRequestKey, long branchNo, long cashAccountId,
                                        BigDecimal amount, Long invoiceId, String documentLabel,
-                                       String paymentType, String paymentName) {}
+                                       List<ReceiptItem> items, String paymentType, String paymentName) {
+        public PaymentReceiptSource {
+            items = items == null ? List.of() : List.copyOf(items);
+        }
+    }
     public record RecentPayment(String paymentRequestKey, String createdAt, String documentLabel,
                                 BigDecimal amount, String paymentName, String operationStatus,
                                 String fiscalDocumentId) {}
+    private record ReceiptLineDraft(String name, BigDecimal weight) {}
+    private record ProductDimensions(BigDecimal widthMm, BigDecimal heightMm) {}
+    private record InvoiceOrderProductRow(long orderNo, BigDecimal invoiceOrderAmount,
+                                          Long productId, BigDecimal productTotal, String configuration) {}
+    private record AllocationPart(int index, long kopecs, BigDecimal fraction) {}
     private record RecentRequest(String requestKey, long customerId, long branchNo,
                                  String payload, String result, Timestamp createdAt) {}
     private record OperationLinkState(String status, String fiscalDocumentId) {}
