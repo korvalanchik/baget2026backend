@@ -228,6 +228,8 @@ class PrroShiftStatusControllerTest {
     @Test
     void flagsMismatchInsteadOfAssumingShiftIsOpen() throws Exception {
         stubDevice("shift-pending", "operator-serial", 1);
+        when(db.queryForObject(contains("FROM prro_operations"), eq(Boolean.class),
+                eq(9L), eq("shift-pending"))).thenReturn(true);
         when(client.getRroInfo(any(CheckRequest.class))).thenReturn(
                 RroInfoResponse.newBuilder().setStatus(RroInfoResponse.Status.OK)
                         .setStatusRro(1).setOpenShift(false).setOnline(true).build());
@@ -241,6 +243,7 @@ class PrroShiftStatusControllerTest {
         assertEquals("RECONCILIATION_REQUIRED", response.state());
         assertFalse(response.dpsOpenShift());
         assertTrue(response.localShiftPrepared());
+        assertTrue(response.localShiftOpenPrepared());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
