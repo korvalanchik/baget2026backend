@@ -112,6 +112,14 @@ public class PrroSubmissionService {
         return message.length() <= 400 ? message : message.substring(0, 400);
     }
 
+    private static String safeMessage(Throwable ex) {
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            message = ex.getClass().getSimpleName();
+        }
+        return message.length() <= 400 ? message : message.substring(0, 400);
+    }
+
     public static class SubmissionOutcomeUnknownException extends RuntimeException {
         private final long operationId;
 

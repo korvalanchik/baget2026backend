@@ -17,13 +17,15 @@ class PrroSubmissionServiceTest {
 
     private PrroOperationService operations;
     private DpsPrroGrpcClient client;
+    private PrroFiscalDocumentArchiveService archive;
     private PrroSubmissionService service;
 
     @BeforeEach
     void setUp() {
         operations = mock(PrroOperationService.class);
         client = mock(DpsPrroGrpcClient.class);
-        service = new PrroSubmissionService(operations, client);
+        archive = mock(PrroFiscalDocumentArchiveService.class);
+        service = new PrroSubmissionService(operations, client, archive);
     }
 
     @Test
@@ -31,17 +33,52 @@ class PrroSubmissionServiceTest {
         byte[] signedXml = "<signed/>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         String hash = sha256(signedXml);
         when(operations.get(7L)).thenReturn(operation(PrroOperationService.Status.SIGNED, hash));
-        when(client.sendCheckV2(any(Check.class))).thenReturn(CheckResponse.newBuilder()
-                .setId("fiscal-123").setStatus(CheckResponse.Status.OK).build());
-        when(operations.transition(eq(7L), eq(PrroOperationService.Status.SENDING),
-                eq(PrroOperationService.Status.FISCALIZED), eq(hash), eq("fiscal-123"),
-                eq(1), any())).thenReturn(operation(PrroOperationService.Status.FISCALIZED, hash));
+        CheckResponse response = CheckResponse.newBuilder()
+                .setId("fiscal-123").setStatus(CheckResponse.Status.OK)
+                .setDataSign(ByteString.copyFrom(new byte[]{0x30, 0x01, 0x02}))
+                .setIdSign(ByteString.copyFrom(new byte[]{0x30, 0x01, 0x03}))
+                .build();
+        when(client.sendCheckV2(any(Check.class))).thenReturn(response);
+        when(archive.completeFiscalized(7L, hash, response))
+                .thenReturn(operation(PrroOperationService.Status.FISCALIZED, hash));
 
         var result = service.submitSignedDocument(7L, check(signedXml));
 
         assertEquals(PrroOperationService.Status.FISCALIZED, result.status());
         verify(operations).transition(eq(7L), eq(PrroOperationService.Status.SIGNED),
                 eq(PrroOperationService.Status.SENDING), eq(hash), isNull(), isNull(), isNull());
+        verify(archive).completeFiscalized(7L, hash, CheckResponse.newBuilder()
+                .setId("fiscal-123").setStatus(CheckResponse.Status.OK)
+                .setDataSign(ByteString.copyFrom(new byte[]{0x30, 0x01, 0x02}))
+                .setIdSign(ByteString.copyFrom(new byte[]{0x30, 0x01, 0x03}))
+                .build());
+    }
+
+    @Test
+    void marksAcceptedDocumentUnknownWhenOriginalResponseCannotBeArchived() {
+        byte[] signedXml = "<signed/>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String hash = sha256(signedXml);
+        CheckResponse response = CheckResponse.newBuilder()
+                .setId("fiscal-archive-failed")
+                .setStatus(CheckResponse.Status.OK)
+                .setDataSign(ByteString.copyFrom(new byte[]{0x30, 0x01}))
+                .build();
+        when(operations.get(7L)).thenReturn(operation(PrroOperationService.Status.SIGNED, hash),
+                operation(PrroOperationService.Status.SENDING, hash));
+        when(client.sendCheckV2(any(Check.class))).thenReturn(response);
+        when(archive.completeFiscalized(7L, hash, response))
+                .thenThrow(new IllegalStateException("archive unavailable"));
+        when(operations.transition(eq(7L), eq(PrroOperationService.Status.SENDING),
+                eq(PrroOperationService.Status.UNKNOWN_RESULT), eq(hash),
+                eq("fiscal-archive-failed"), eq(1), contains("could not be archived")))
+                .thenReturn(operation(PrroOperationService.Status.UNKNOWN_RESULT, hash));
+
+        var result = service.submitSignedDocument(7L, check(signedXml));
+
+        assertEquals(PrroOperationService.Status.UNKNOWN_RESULT, result.status());
+        verify(operations).transition(eq(7L), eq(PrroOperationService.Status.SENDING),
+                eq(PrroOperationService.Status.UNKNOWN_RESULT), eq(hash),
+                eq("fiscal-archive-failed"), eq(1), contains("could not be archived"));
     }
 
     @Test
