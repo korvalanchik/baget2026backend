@@ -25,10 +25,13 @@ public class PrroSubmissionService {
 
     private final PrroOperationService operations;
     private final DpsPrroGrpcClient client;
+    private final PrroFiscalDocumentArchiveService archive;
 
-    public PrroSubmissionService(PrroOperationService operations, DpsPrroGrpcClient client) {
+    public PrroSubmissionService(PrroOperationService operations, DpsPrroGrpcClient client,
+                                 PrroFiscalDocumentArchiveService archive) {
         this.operations = Objects.requireNonNull(operations, "operations");
         this.client = Objects.requireNonNull(client, "client");
+        this.archive = Objects.requireNonNull(archive, "archive");
     }
 
     public PrroOperationService.Operation submitSignedDocument(long operationId, Check check) {
@@ -69,9 +72,23 @@ public class PrroSubmissionService {
 
         int responseCode = response.getStatusValue();
         if (responseCode == CheckResponse.Status.OK.getNumber()) {
-            return operations.transition(operationId, PrroOperationService.Status.SENDING,
-                    PrroOperationService.Status.FISCALIZED, signedHash, response.getId(),
-                    responseCode, response.getErrorMessage());
+            try {
+                return archive.completeFiscalized(operationId, signedHash, response);
+            } catch (RuntimeException archiveFailure) {
+                // DPS has accepted the document, but its original response could not
+                // be committed to the local archive. Keep the document ID and block
+                // further submissions until the operation is reconciled.
+                PrroOperationService.Operation current = operations.get(operationId);
+                if (current.status() == PrroOperationService.Status.SENDING) {
+                    String message = "DPS accepted the document, but its original data_sign "
+                            + "could not be archived: " + safeMessage(archiveFailure);
+                    return operations.transition(operationId, PrroOperationService.Status.SENDING,
+                            PrroOperationService.Status.UNKNOWN_RESULT, signedHash,
+                            response.getId().isBlank() ? null : response.getId(),
+                            responseCode, message);
+                }
+                throw archiveFailure;
+            }
         }
 
         if (responseCode == CheckResponse.Status.UNKNOWN.getNumber()) {
@@ -108,6 +125,14 @@ public class PrroSubmissionService {
         String message = ex.getStatus().getCode().name();
         if (ex.getStatus().getDescription() != null && !ex.getStatus().getDescription().isBlank()) {
             message += ": " + ex.getStatus().getDescription();
+        }
+        return message.length() <= 400 ? message : message.substring(0, 400);
+    }
+
+    private static String safeMessage(Throwable ex) {
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            message = ex.getClass().getSimpleName();
         }
         return message.length() <= 400 ? message : message.substring(0, 400);
     }
