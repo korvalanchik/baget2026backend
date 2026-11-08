@@ -539,6 +539,7 @@ public class PrroPaymentOperationService {
             case FISCALIZED -> "Чек фіскалізовано";
             case REJECTED -> "ДПС відхилила документ";
             case UNKNOWN_RESULT -> "Невідомий результат; перед повторною спробою потрібна звірка з ДПС";
+            case CANCELLED -> "Локальну операцію скасовано до надсилання документа до ДПС";
         };
         return new PaymentOperationView(requestKey, operation.id(), operation.status().name(),
                 existingLink, message);

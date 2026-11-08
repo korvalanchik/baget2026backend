@@ -117,6 +117,19 @@ public class PrroShiftStatusController {
 
         boolean localShiftPrepared = device.activeShiftKey() != null
                 && !device.activeShiftKey().isBlank();
+        boolean localShiftOpenPrepared = localShiftPrepared && Boolean.TRUE.equals(db.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM prro_operations
+                     WHERE device_id = ?
+                       AND shift_key = ?
+                       AND source_type = 'SHIFT_OPEN'
+                       AND document_type = 'SERVICECHK'
+                       AND status = 'PREPARED'
+                       AND signed_document_hash IS NULL
+                       AND fiscal_document_id IS NULL
+                )
+                """, Boolean.class, device.id(), device.activeShiftKey()));
         String activeSignerKeyId = device.activeSignerKeyId();
         boolean localSignerBound = activeSignerKeyId != null && !activeSignerKeyId.isBlank();
         boolean dpsInfoOk = info.getStatus() == RroInfoResponse.Status.OK;
@@ -158,6 +171,7 @@ public class PrroShiftStatusController {
                 status.getOnline(),
                 status.getOpenShift(),
                 localShiftPrepared,
+                localShiftOpenPrepared,
                 localSignerBound,
                 device.nextLocalNumber(),
                 localSignerBound ? activeSignerKeyId : null,
@@ -302,6 +316,7 @@ public class PrroShiftStatusController {
             boolean online,
             boolean dpsOpenShift,
             boolean localShiftPrepared,
+            boolean localShiftOpenPrepared,
             boolean localSignerBound,
             int nextLocalNumber,
             String activeSignerKeyId,
