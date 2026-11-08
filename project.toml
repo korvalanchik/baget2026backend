@@ -1,0 +1,5 @@
+# Keep Cloud Run Buildpacks aligned with the Java version used by Baget.
+# build.gradle declares Java 17 and Dockerfile uses an Eclipse Temurin 17 runtime.
+[[build.env]]
+name = "GOOGLE_RUNTIME_VERSION"
+value = "17"
