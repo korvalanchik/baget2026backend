@@ -91,7 +91,7 @@ public class PrroShiftClosePreparationService {
         }
         String signerKeyId = request.signerKeyId().trim();
         if (!device.activeSignerKeyId().equals(signerKeyId)) {
-            throw conflict("Закриття тестової зміни дозволено тим самим підписувачем, який її відкрив.");
+            throw conflict("Закриття зміни дозволено тим самим підписувачем, який її відкрив.");
         }
 
         String requestHash = sha256((request.branchNo() + "|" + device.id() + "|"
