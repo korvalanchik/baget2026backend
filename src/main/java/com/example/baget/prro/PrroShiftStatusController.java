@@ -1,6 +1,7 @@
 package com.example.baget.prro;
 
 import com.example.baget.prro.client.DpsPrroGrpcClient;
+import com.example.baget.prro.config.PrroProperties;
 import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
 import com.programika.rro.ws.chk.CheckResponse;
@@ -42,12 +43,14 @@ public class PrroShiftStatusController {
     private final PrroAccessService access;
     private final JdbcTemplate db;
     private final DpsPrroGrpcClient client;
+    private final PrroProperties properties;
 
     public PrroShiftStatusController(PrroAccessService access, JdbcTemplate db,
-                                     DpsPrroGrpcClient client) {
+                                     DpsPrroGrpcClient client, PrroProperties properties) {
         this.access = Objects.requireNonNull(access, "access");
         this.db = Objects.requireNonNull(db, "db");
         this.client = Objects.requireNonNull(client, "client");
+        this.properties = Objects.requireNonNull(properties, "properties");
     }
 
     @PostMapping("/status")
@@ -71,7 +74,7 @@ public class PrroShiftStatusController {
         }
 
         List<Device> devices = db.query("""
-                SELECT id, rro_fn, display_name, environment, active_shift_key,
+                SELECT id, rro_fn, display_name, active_shift_key,
                        active_signer_key_id, next_local_number
                   FROM prro_devices
                  WHERE branch_no = ? AND enabled = TRUE
@@ -80,7 +83,6 @@ public class PrroShiftStatusController {
                 rs.getLong("id"),
                 rs.getString("rro_fn"),
                 rs.getString("display_name"),
-                rs.getString("environment"),
                 rs.getString("active_shift_key"),
                 rs.getString("active_signer_key_id"),
                 rs.getInt("next_local_number")), branchNo);
@@ -148,7 +150,7 @@ public class PrroShiftStatusController {
                 device.id(),
                 device.rroFn(),
                 device.displayName(),
-                device.environment(),
+                properties.getEndpointMode(),
                 state,
                 info.getStatus().name(),
                 status.getStatus().name(),
@@ -193,7 +195,7 @@ public class PrroShiftStatusController {
         }
 
         List<Device> devices = db.query("""
-                SELECT id, rro_fn, display_name, environment, active_shift_key,
+                SELECT id, rro_fn, display_name, active_shift_key,
                        active_signer_key_id, next_local_number
                   FROM prro_devices
                  WHERE branch_no = ? AND enabled = TRUE
@@ -202,7 +204,6 @@ public class PrroShiftStatusController {
                 rs.getLong("id"),
                 rs.getString("rro_fn"),
                 rs.getString("display_name"),
-                rs.getString("environment"),
                 rs.getString("active_shift_key"),
                 rs.getString("active_signer_key_id"),
                 rs.getInt("next_local_number")), branchNo);
@@ -283,7 +284,7 @@ public class PrroShiftStatusController {
             @NotBlank @Size(max = 32) String fiscalNumber,
             @NotBlank @Size(max = 100_000) String signatureBase64) {}
 
-    private record Device(long id, String rroFn, String displayName, String environment,
+    private record Device(long id, String rroFn, String displayName,
                           String activeShiftKey, String activeSignerKeyId, int nextLocalNumber) {}
 
     public record OperatorView(String serial, int status, boolean senior, String name) {}
@@ -293,7 +294,7 @@ public class PrroShiftStatusController {
             long deviceId,
             String fiscalNumber,
             String displayName,
-            String environment,
+            String endpointMode,
             String state,
             String infoStatus,
             String statusStatus,

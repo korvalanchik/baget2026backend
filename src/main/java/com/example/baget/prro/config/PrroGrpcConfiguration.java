@@ -15,6 +15,7 @@ public class PrroGrpcConfiguration {
 
     @Bean(destroyMethod = "shutdown")
     public ManagedChannel dpsPrroChannel(PrroProperties properties) {
+        properties.validateEndpoint();
         ManagedChannelBuilder<?> builder = ManagedChannelBuilder
                 .forAddress(properties.getHost(), properties.getPort());
 

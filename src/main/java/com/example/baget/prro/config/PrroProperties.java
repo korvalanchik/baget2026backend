@@ -12,6 +12,7 @@ public class PrroProperties {
     private int port = 9443;
     private boolean tlsEnabled = true;
     private boolean enabled = false;
+    private String taxCode = "Н";
     private long rpcDeadlineMillis = 15_000;
 
     public String getHost() {

@@ -74,12 +74,12 @@ public class PrroShiftOpenPreparationService {
 
         byte[] rroSignature = decodeSignature(request.rroSignatureBase64());
         List<Device> devices = db.query("""
-                SELECT id, rro_fn, environment, active_shift_key
+                SELECT id, rro_fn, active_shift_key
                   FROM prro_devices
                  WHERE branch_no = ? AND enabled = TRUE
                  ORDER BY id
                 """, (rs, rowNum) -> new Device(rs.getLong("id"), rs.getString("rro_fn"),
-                rs.getString("environment"), rs.getString("active_shift_key")), request.branchNo());
+                rs.getString("active_shift_key")), request.branchNo());
 
         if (devices.isEmpty()) {
             throw conflict("Для цієї філії не налаштовано активний ПРРО.");
@@ -282,5 +282,5 @@ public class PrroShiftOpenPreparationService {
                                     String status, long dateTime, String signingInputBase64,
                                     String signingInputSha256, String previousDocumentSha256) {}
 
-    private record Device(long id, String rroFn, String environment, String activeShiftKey) {}
+    private record Device(long id, String rroFn, String activeShiftKey) {}
 }

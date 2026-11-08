@@ -289,14 +289,12 @@ public class PrroOperationService {
     private Device lockDevice(long deviceId) {
         try {
             return jdbcTemplate.queryForObject("""
-                    SELECT id, environment, enabled, active_shift_key, active_signer_key_id,
-                           next_local_number
+                    SELECT id, enabled, active_shift_key, active_signer_key_id, next_local_number
                       FROM prro_devices
                      WHERE id = ?
                      FOR UPDATE
                     """, (rs, rowNum) -> new Device(
                     rs.getLong("id"),
-                    rs.getString("environment"),
                     rs.getBoolean("enabled"),
                     rs.getString("active_shift_key"),
                     rs.getString("active_signer_key_id"),
@@ -451,7 +449,7 @@ public class PrroOperationService {
         }
     }
 
-    private record Device(long id, String environment, boolean enabled, String activeShiftKey,
+    private record Device(long id, boolean enabled, String activeShiftKey,
                           String activeSignerKeyId, int nextLocalNumber) {}
 
     public record PrepareOperation(long deviceId, String shiftKey, String idempotencyKey,
