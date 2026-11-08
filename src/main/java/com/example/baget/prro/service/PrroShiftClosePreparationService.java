@@ -37,8 +37,6 @@ import java.util.Objects;
 @Service
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroShiftClosePreparationService {
-    private static final String TEST_HOST = "cabinet.tax.gov.ua";
-    private static final int TEST_PORT = 9443;
     private static final ZoneId UKRAINE = ZoneId.of("Europe/Kyiv");
     private static final DateTimeFormatter DPS_DATE_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss");
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
@@ -46,21 +44,19 @@ public class PrroShiftClosePreparationService {
     private final PrroAccessService access;
     private final JdbcTemplate db;
     private final DpsPrroGrpcClient client;
-    private final PrroProperties properties;
     private final PrroOperationService operations;
     private final PrroZReportEnvelopeBuilder envelopeBuilder;
     private final PrroZReportAggregator zReportAggregator;
     private final PrroXmlDocumentBuilder documentBuilder = new PrroXmlDocumentBuilder();
 
     public PrroShiftClosePreparationService(PrroAccessService access, JdbcTemplate db,
-                                            DpsPrroGrpcClient client, PrroProperties properties,
+                                            DpsPrroGrpcClient client,
                                             PrroOperationService operations,
                                             PrroZReportEnvelopeBuilder envelopeBuilder,
                                             PrroZReportAggregator zReportAggregator) {
         this.access = Objects.requireNonNull(access);
         this.db = Objects.requireNonNull(db);
         this.client = Objects.requireNonNull(client);
-        this.properties = Objects.requireNonNull(properties);
         this.operations = Objects.requireNonNull(operations);
         this.envelopeBuilder = Objects.requireNonNull(envelopeBuilder);
         this.zReportAggregator = Objects.requireNonNull(zReportAggregator);
@@ -72,13 +68,12 @@ public class PrroShiftClosePreparationService {
         byte[] rroSignature = decodeSignature(request.rroSignatureBase64());
 
         List<Device> devices = db.query("""
-                SELECT id, rro_fn, environment, active_shift_key, active_signer_key_id,
-                       next_local_number
+                SELECT id, rro_fn, active_shift_key, active_signer_key_id, next_local_number
                   FROM prro_devices
                  WHERE branch_no = ? AND enabled = TRUE
                  ORDER BY id
                 """, (rs, rowNum) -> new Device(
-                rs.getLong("id"), rs.getString("rro_fn"), rs.getString("environment"),
+                rs.getLong("id"), rs.getString("rro_fn"),
                 rs.getString("active_shift_key"), rs.getString("active_signer_key_id"),
                 rs.getInt("next_local_number")), request.branchNo());
 
@@ -88,8 +83,6 @@ public class PrroShiftClosePreparationService {
         if (!device.rroFn().equals(request.fiscalNumber().trim())) {
             throw conflict("Фіскальний номер не відповідає ПРРО цієї філії.");
         }
-        requireTestTarget(device.environment());
-
         if (device.activeShiftKey() == null || device.activeShiftKey().isBlank()) {
             throw conflict("Локальна зміна не відкрита. Спочатку звірте стан ПРРО з ДПС.");
         }
@@ -98,7 +91,7 @@ public class PrroShiftClosePreparationService {
         }
         String signerKeyId = request.signerKeyId().trim();
         if (!device.activeSignerKeyId().equals(signerKeyId)) {
-            throw conflict("Закриття тестової зміни дозволено тим самим підписувачем, який її відкрив.");
+            throw conflict("Закриття зміни дозволено тим самим підписувачем, який її відкрив.");
         }
 
         String requestHash = sha256((request.branchNo() + "|" + device.id() + "|"
@@ -239,15 +232,6 @@ public class PrroShiftClosePreparationService {
         return result(operation, device, stored);
     }
 
-    private void requireTestTarget(String environment) {
-        if (!"TEST".equalsIgnoreCase(environment)
-                || !TEST_HOST.equalsIgnoreCase(properties.getHost())
-                || properties.getPort() != TEST_PORT
-                || !properties.isTlsEnabled()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Тестове закриття дозволене лише для TEST-ПРРО на cabinet.tax.gov.ua:9443.");
-        }
-    }
 
     private static PreparationResult result(PrroOperationService.Operation operation,
                                             Device device,
@@ -317,6 +301,6 @@ public class PrroShiftClosePreparationService {
                                     String status, long dateTime, String signingInputBase64,
                                     String signingInputSha256, String previousDocumentSha256) {}
 
-    private record Device(long id, String rroFn, String environment, String activeShiftKey,
+    private record Device(long id, String rroFn, String activeShiftKey,
                           String activeSignerKeyId, int nextLocalNumber) {}
 }

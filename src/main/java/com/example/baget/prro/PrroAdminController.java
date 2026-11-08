@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 @RestController
@@ -43,14 +42,20 @@ public class PrroAdminController {
                 rs.getString("BranchName")));
     }
 
+    @GetMapping("/endpoint")
+    public EndpointView endpoint(Authentication authentication) {
+        access.requireAdministrator(authentication);
+        return new EndpointView(properties.getEndpointMode(), properties.getHost(),
+                properties.getPort(), properties.isTlsEnabled());
+    }
+
     @GetMapping("/devices")
     public List<DeviceView> devices(Authentication authentication) {
         access.requireAdministrator(authentication);
         return db.query("""
                 SELECT d.id, d.branch_no, b.BranchName, d.rro_fn, d.display_name,
-                       d.environment, d.enabled, d.active_shift_key,
-                       d.active_signer_key_id, d.next_local_number,
-                       d.created_at, d.updated_at
+                       d.enabled, d.active_shift_key, d.active_signer_key_id,
+                       d.next_local_number, d.created_at, d.updated_at
                   FROM prro_devices d
                   LEFT JOIN branches b ON b.BranchNo = d.branch_no
                  ORDER BY d.branch_no IS NULL, d.branch_no, d.id
@@ -60,7 +65,6 @@ public class PrroAdminController {
                 rs.getString("BranchName"),
                 rs.getString("rro_fn"),
                 rs.getString("display_name"),
-                rs.getString("environment"),
                 rs.getBoolean("enabled"),
                 rs.getString("active_shift_key") != null,
                 rs.getString("active_signer_key_id"),
@@ -77,13 +81,11 @@ public class PrroAdminController {
         validateRequest(request);
         ensureBranchAvailable(request.branchNo(), null);
         db.update("""
-                INSERT INTO prro_devices
-                    (branch_no, rro_fn, display_name, environment, enabled)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO prro_devices (branch_no, rro_fn, display_name, enabled)
+                VALUES (?, ?, ?, ?)
                 """, request.branchNo(), request.fiscalNumber().trim(),
-                request.displayName().trim(), request.environment(), request.enabled());
-        long id = Objects.requireNonNull(db.queryForObject(
-                "SELECT LAST_INSERT_ID()", Long.class));
+                request.displayName().trim(), request.enabled());
+        long id = Objects.requireNonNull(db.queryForObject("SELECT LAST_INSERT_ID()", Long.class));
         audit(id, authentication.getName(), "CREATED");
         return device(id);
     }
@@ -97,10 +99,9 @@ public class PrroAdminController {
         validateRequest(request);
         DeviceState current = state(id);
         boolean identityChanged = !current.fiscalNumber().equals(request.fiscalNumber().trim())
-                || !Objects.equals(current.branchNo(), request.branchNo())
-                || !current.environment().equals(request.environment());
+                || !Objects.equals(current.branchNo(), request.branchNo());
         if (identityChanged && current.activeShift()) {
-            throw conflict("Не можна змінювати фіскальний номер, філію або середовище під час відкритої зміни.");
+            throw conflict("Не можна змінювати фіскальний номер або філію під час відкритої зміни.");
         }
         if (!request.enabled() && current.activeShift()) {
             throw conflict("Спочатку закрийте зміну ПРРО, а потім вимикайте пристрій.");
@@ -115,11 +116,10 @@ public class PrroAdminController {
         ensureBranchAvailable(request.branchNo(), id);
         db.update("""
                 UPDATE prro_devices
-                   SET branch_no = ?, rro_fn = ?, display_name = ?,
-                       environment = ?, enabled = ?
+                   SET branch_no = ?, rro_fn = ?, display_name = ?, enabled = ?
                  WHERE id = ?
                 """, request.branchNo(), request.fiscalNumber().trim(),
-                request.displayName().trim(), request.environment(), request.enabled(), id);
+                request.displayName().trim(), request.enabled(), id);
         audit(id, authentication.getName(), "UPDATED");
         return device(id);
     }
@@ -139,17 +139,6 @@ public class PrroAdminController {
     }
 
     private void validateRequest(DeviceRequest request) {
-        if (!"TEST".equals(request.environment()) && !"PRODUCTION".equals(request.environment())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Середовище має бути TEST або PRODUCTION.");
-        }
-        String configuredEnvironment = "cabinet.tax.gov.ua".equalsIgnoreCase(properties.getHost())
-                ? "TEST" : "PRODUCTION";
-        if (!configuredEnvironment.equals(request.environment())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Вибране середовище ПРРО не збігається з endpoint ДПС, налаштованим для цього backend. "
-                            + "Зміна середовища потребує окремого серверного налаштування.");
-        }
         if (request.branchNo() != null) {
             Integer exists = db.queryForObject(
                     "SELECT COUNT(*) FROM branches WHERE BranchNo = ?",
@@ -177,11 +166,10 @@ public class PrroAdminController {
 
     private DeviceState state(long id) {
         List<DeviceState> rows = db.query("""
-                SELECT branch_no, rro_fn, environment, active_shift_key
+                SELECT branch_no, rro_fn, active_shift_key
                   FROM prro_devices WHERE id = ?
                 """, (rs, row) -> new DeviceState(nullableLong(rs.getObject("branch_no")),
-                rs.getString("rro_fn"), rs.getString("environment"),
-                rs.getString("active_shift_key") != null), id);
+                rs.getString("rro_fn"), rs.getString("active_shift_key") != null), id);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ПРРО не знайдено.");
         return rows.get(0);
     }
@@ -189,16 +177,14 @@ public class PrroAdminController {
     private DeviceView device(long id) {
         return db.queryForObject("""
                 SELECT d.id, d.branch_no, b.BranchName, d.rro_fn, d.display_name,
-                       d.environment, d.enabled, d.active_shift_key,
-                       d.active_signer_key_id, d.next_local_number,
-                       d.created_at, d.updated_at
+                       d.enabled, d.active_shift_key, d.active_signer_key_id,
+                       d.next_local_number, d.created_at, d.updated_at
                   FROM prro_devices d LEFT JOIN branches b ON b.BranchNo = d.branch_no
                  WHERE d.id = ?
                 """, (rs, row) -> new DeviceView(rs.getLong("id"),
                 nullableLong(rs.getObject("branch_no")), rs.getString("BranchName"),
                 rs.getString("rro_fn"), rs.getString("display_name"),
-                rs.getString("environment"), rs.getBoolean("enabled"),
-                rs.getString("active_shift_key") != null,
+                rs.getBoolean("enabled"), rs.getString("active_shift_key") != null,
                 rs.getString("active_signer_key_id"), rs.getInt("next_local_number"),
                 rs.getTimestamp("created_at").toInstant().toString(),
                 rs.getTimestamp("updated_at").toInstant().toString()), id);
@@ -209,7 +195,6 @@ public class PrroAdminController {
         String snapshot = "{\"branchNo\":" + (view.branchNo() == null ? "null" : view.branchNo())
                 + ",\"fiscalNumber\":\"" + escape(view.fiscalNumber())
                 + "\",\"displayName\":\"" + escape(view.displayName())
-                + "\",\"environment\":\"" + view.environment()
                 + "\",\"enabled\":" + view.enabled() + "}";
         db.update("""
                 INSERT INTO prro_device_audit (device_id, actor, action, snapshot)
@@ -230,16 +215,15 @@ public class PrroAdminController {
     }
 
     public record BranchView(long branchNo, String name) {}
+    public record EndpointView(String mode, String host, int port, boolean tlsEnabled) {}
     public record DeviceView(long id, Long branchNo, String branchName,
-                             String fiscalNumber, String displayName, String environment,
+                             String fiscalNumber, String displayName,
                              boolean enabled, boolean shiftOpen, String signerKeyId,
                              int nextLocalNumber, String createdAt, String updatedAt) {}
     public record AuditView(long id, Long deviceId, String actor, String action,
                             String snapshot, String createdAt) {}
     public record DeviceRequest(Long branchNo,
             @NotBlank @Size(max = 32) @Pattern(regexp = "[0-9]+") String fiscalNumber,
-            @NotBlank @Size(max = 120) String displayName,
-            @NotBlank String environment, boolean enabled) {}
-    private record DeviceState(Long branchNo, String fiscalNumber, String environment,
-                               boolean activeShift) {}
+            @NotBlank @Size(max = 120) String displayName, boolean enabled) {}
+    private record DeviceState(Long branchNo, String fiscalNumber, boolean activeShift) {}
 }

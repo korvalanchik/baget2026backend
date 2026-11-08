@@ -1,7 +1,6 @@
 package com.example.baget.prro.service;
 
 import com.example.baget.prro.PrroAccessService;
-import com.example.baget.prro.config.PrroProperties;
 import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.Check;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,22 +17,16 @@ import java.util.Objects;
 @Service
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroShiftOpenSubmissionService {
-    private static final String TEST_HOST = "cabinet.tax.gov.ua";
-    private static final int TEST_PORT = 9443;
-
     private final PrroAccessService access;
     private final JdbcTemplate db;
-    private final PrroProperties properties;
     private final PrroOperationService operations;
     private final PrroSubmissionService submission;
 
     public PrroShiftOpenSubmissionService(PrroAccessService access, JdbcTemplate db,
-                                          PrroProperties properties,
                                           PrroOperationService operations,
                                           PrroSubmissionService submission) {
         this.access = Objects.requireNonNull(access);
         this.db = Objects.requireNonNull(db);
-        this.properties = Objects.requireNonNull(properties);
         this.operations = Objects.requireNonNull(operations);
         this.submission = Objects.requireNonNull(submission);
     }
@@ -48,24 +41,15 @@ public class PrroShiftOpenSubmissionService {
         }
 
         Device device = db.query("""
-                SELECT branch_no, rro_fn, environment
+                SELECT branch_no, rro_fn
                   FROM prro_devices
                  WHERE id = ?
                 """, rs -> rs.next() ? new Device(rs.getLong("branch_no"),
-                rs.getString("rro_fn"), rs.getString("environment")) : null, operation.deviceId());
+                rs.getString("rro_fn")) : null, operation.deviceId());
         if (device == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ПРРО не знайдено.");
         }
         access.requireBranchAccess(user, device.branchNo());
-
-        // Fail closed: this experimental endpoint must never reach a production RRO.
-        if (!"TEST".equalsIgnoreCase(device.environment())
-                || !TEST_HOST.equalsIgnoreCase(properties.getHost())
-                || properties.getPort() != TEST_PORT
-                || !properties.isTlsEnabled()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Тестове відкриття зміни дозволене лише для TEST-ПРРО на cabinet.tax.gov.ua:9443.");
-        }
 
         if (operation.status() != PrroOperationService.Status.PREPARED) {
             return result(operations.get(operation.id()));
@@ -144,5 +128,5 @@ public class PrroShiftOpenSubmissionService {
     public record SubmissionResult(long operationId, String status, Integer responseCode,
                                    String responseMessage, String fiscalDocumentId,
                                    String signedPayloadSha256) {}
-    private record Device(long branchNo, String rroFn, String environment) {}
+    private record Device(long branchNo, String rroFn) {}
 }

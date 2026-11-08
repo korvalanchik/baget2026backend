@@ -30,9 +30,9 @@ public class PrroBranchController {
     public DeviceView device(@PathVariable long branchNo, Authentication authentication) {
         var user = access.requireOperationalUser(authentication);
         access.requireBranchAccess(user, branchNo);
-        List<DeviceView> devices = db.query("SELECT id, rro_fn, display_name, environment FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
+        List<DeviceView> devices = db.query("SELECT id, rro_fn, display_name FROM prro_devices WHERE branch_no = ? AND enabled = TRUE",
                 (rs, row) -> new DeviceView(rs.getLong("id"), branchNo, rs.getString("rro_fn"),
-                        rs.getString("display_name"), rs.getString("environment")), branchNo);
+                        rs.getString("display_name")), branchNo);
         if (devices.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Для цієї філії не налаштовано активний ПРРО.");
         }
@@ -42,7 +42,7 @@ public class PrroBranchController {
         return devices.get(0);
     }
 
-    public record DeviceView(long id, long branchNo, String fiscalNumber, String displayName, String environment) {}
+    public record DeviceView(long id, long branchNo, String fiscalNumber, String displayName) {}
 
     @GetMapping
     public List<PrroAdminController.BranchView> branches(Authentication authentication) {

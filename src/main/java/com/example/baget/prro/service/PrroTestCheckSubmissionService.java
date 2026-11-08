@@ -18,8 +18,6 @@ import java.util.Objects;
 @Service
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroTestCheckSubmissionService {
-    private static final String TEST_HOST = "cabinet.tax.gov.ua";
-    private static final int TEST_PORT = 9443;
 
     private final PrroAccessService access;
     private final JdbcTemplate db;
@@ -61,19 +59,16 @@ public class PrroTestCheckSubmissionService {
         }
 
         Device device = db.query("""
-                SELECT branch_no, rro_fn, environment, active_shift_key, active_signer_key_id
+                SELECT branch_no, rro_fn, active_shift_key, active_signer_key_id
                   FROM prro_devices WHERE id = ?
                 """, rs -> rs.next() ? new Device(rs.getLong("branch_no"), rs.getString("rro_fn"),
-                rs.getString("environment"), rs.getString("active_shift_key"),
-                rs.getString("active_signer_key_id")) : null, operation.deviceId());
+                rs.getString("active_shift_key"), rs.getString("active_signer_key_id")) : null, operation.deviceId());
         if (device == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ПРРО не знайдено.");
         access.requireBranchAccess(user, device.branchNo());
 
-        if (!"TEST".equalsIgnoreCase(device.environment())
-                || !TEST_HOST.equalsIgnoreCase(properties.getHost())
-                || properties.getPort() != TEST_PORT || !properties.isTlsEnabled()) {
+        if ("TEST".equals(expectedSource) && !properties.isTestEndpoint()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Тестовий чек дозволено надсилати лише на cabinet.tax.gov.ua:9443.");
+                    "Синтетичний тестовий чек дозволено надсилати лише на TEST API ДПС.");
         }
         if (!Objects.equals(device.activeShiftKey(), operation.shiftKey())
                 || !Objects.equals(device.activeSignerKeyId(), operation.signerKeyId())) {
@@ -92,7 +87,7 @@ public class PrroTestCheckSubmissionService {
         if (prepared == null || prepared.dpsDateTime() <= 0 || prepared.bytes().length == 0
                 || operation.localNumber() <= 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Підготовлені параметри тестового CHK відсутні або некоректні.");
+                    "Підготовлені параметри CHK відсутні або некоректні.");
         }
 
         final byte[] signedBytes;
@@ -155,6 +150,6 @@ public class PrroTestCheckSubmissionService {
                                    String responseMessage, String fiscalDocumentId,
                                    String signedPayloadSha256) {}
 
-    private record Device(long branchNo, String rroFn, String environment,
+    private record Device(long branchNo, String rroFn,
                           String activeShiftKey, String activeSignerKeyId) {}
 }

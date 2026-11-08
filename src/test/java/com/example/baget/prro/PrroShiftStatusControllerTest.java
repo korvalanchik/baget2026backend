@@ -2,6 +2,7 @@ package com.example.baget.prro;
 
 
 import com.example.baget.prro.client.DpsPrroGrpcClient;
+import com.example.baget.prro.config.PrroProperties;
 import com.example.baget.users.User;
 import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.CheckRequest;
@@ -42,7 +43,7 @@ class PrroShiftStatusControllerTest {
         access = mock(PrroAccessService.class);
         db = mock(JdbcTemplate.class);
         client = mock(DpsPrroGrpcClient.class);
-        controller = new PrroShiftStatusController(access, db, client);
+        controller = new PrroShiftStatusController(access, db, client, new PrroProperties());
         authentication = mock(Authentication.class);
         user = mock(User.class);
         when(access.requireOperationalUser(authentication)).thenReturn(user);
@@ -141,6 +142,7 @@ class PrroShiftStatusControllerTest {
         var response = controller.status(new PrroShiftStatusController.ShiftStatusRequest(7L, "4000318883",
                 Base64.getEncoder().encodeToString(new byte[]{1, 2, 3})), authentication);
 
+        assertEquals("TEST", response.endpointMode());
         assertEquals("OPEN", response.state());
         assertTrue(response.dpsOpenShift());
         assertTrue(response.localShiftPrepared());
@@ -248,7 +250,6 @@ class PrroShiftStatusControllerTest {
         when(rs.getLong("id")).thenReturn(9L);
         when(rs.getString("rro_fn")).thenReturn("4000318883");
         when(rs.getString("display_name")).thenReturn("Каса тест");
-        when(rs.getString("environment")).thenReturn("TEST");
         when(rs.getString("active_shift_key")).thenReturn(activeShiftKey);
         when(rs.getString("active_signer_key_id")).thenReturn(signerKeyId);
         when(rs.getInt("next_local_number")).thenReturn(nextLocalNumber);

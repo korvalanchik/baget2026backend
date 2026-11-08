@@ -37,8 +37,6 @@ import java.util.Objects;
 @Service
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroTestCheckPreparationService {
-    private static final String TEST_HOST = "cabinet.tax.gov.ua";
-    private static final int TEST_PORT = 9443;
     private static final ZoneId UKRAINE = ZoneId.of("Europe/Kyiv");
     private static final DateTimeFormatter DPS_DATE_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss");
     private static final BigDecimal AMOUNT = new BigDecimal("1.00");
@@ -69,20 +67,19 @@ public class PrroTestCheckPreparationService {
         byte[] rroSignature = decodeSignature(request.rroSignatureBase64());
 
         List<Device> devices = db.query("""
-                SELECT id, rro_fn, environment, active_shift_key, active_signer_key_id
+                SELECT id, rro_fn, active_shift_key, active_signer_key_id
                   FROM prro_devices
                  WHERE branch_no = ? AND enabled = TRUE
                  ORDER BY id
                 """, (rs, rowNum) -> new Device(rs.getLong("id"), rs.getString("rro_fn"),
-                rs.getString("environment"), rs.getString("active_shift_key"),
-                rs.getString("active_signer_key_id")), request.branchNo());
+                rs.getString("active_shift_key"), rs.getString("active_signer_key_id")), request.branchNo());
         if (devices.isEmpty()) throw conflict("Для цієї філії не налаштовано активний ПРРО.");
         if (devices.size() != 1) throw conflict("Для філії налаштовано кілька ПРРО.");
         Device device = devices.get(0);
         if (!device.rroFn().equals(request.fiscalNumber().trim())) {
             throw conflict("Фіскальний номер не відповідає ПРРО цієї філії.");
         }
-        requireTestTarget(device.environment());
+        requireTestEndpoint();
         if (device.activeShiftKey() == null || device.activeShiftKey().isBlank()) {
             throw conflict("Спочатку відкрийте та звірте тестову зміну ПРРО.");
         }
@@ -195,12 +192,10 @@ public class PrroTestCheckPreparationService {
         return result(operation, device, stored);
     }
 
-    private void requireTestTarget(String environment) {
-        if (!"TEST".equalsIgnoreCase(environment)
-                || !TEST_HOST.equalsIgnoreCase(properties.getHost())
-                || properties.getPort() != TEST_PORT || !properties.isTlsEnabled()) {
+    private void requireTestEndpoint() {
+        if (!properties.isTestEndpoint()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Тестова фіскалізація дозволена лише для TEST-ПРРО на cabinet.tax.gov.ua:9443.");
+                    "Синтетичний чек на 1,00 грн доступний лише на тестовому API ДПС.");
         }
     }
 
@@ -251,6 +246,6 @@ public class PrroTestCheckPreparationService {
                                     String status, long dateTime, String signingInputBase64,
                                     String signingInputSha256, String previousDocumentSha256) {}
 
-    private record Device(long id, String rroFn, String environment, String activeShiftKey,
+    private record Device(long id, String rroFn, String activeShiftKey,
                           String activeSignerKeyId) {}
 }

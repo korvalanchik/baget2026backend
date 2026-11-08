@@ -34,7 +34,7 @@ import java.util.Objects;
 
 /**
  * Prepares a CHK for a real, already-recorded Baget incoming payment,
- * but deliberately permits submission only to the DPS TEST endpoint.
+ * and submits it through the deployment-wide DPS endpoint.
  *
  * The receipt represents the newly received money only. Allocated customer
  * advance is not recorded as a second receipt, and customer PII is omitted.
@@ -42,9 +42,6 @@ import java.util.Objects;
 @Service
 @ConditionalOnProperty(prefix = "baget.prro", name = "enabled", havingValue = "true")
 public class PrroPaymentCheckPreparationService {
-    private static final String TEST_HOST = "cabinet.tax.gov.ua";
-    private static final int TEST_PORT = 9443;
-    private static final String TEST_TAX_CODE = "Н";
     private static final ZoneId UKRAINE = ZoneId.of("Europe/Kyiv");
     private static final DateTimeFormatter DPS_DATE_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss");
 
@@ -78,14 +75,12 @@ public class PrroPaymentCheckPreparationService {
         if (!device.rroFn().equals(request.fiscalNumber().trim())) {
             throw conflict("Фіскальний номер не відповідає ПРРО цієї філії.");
         }
-        requireTestTarget(device.environment());
-
         String signerKeyId = request.signerKeyId().trim();
         if (device.activeShiftKey() == null || device.activeShiftKey().isBlank()) {
-            throw conflict("Спочатку відкрийте та звірте тестову зміну ПРРО.");
+            throw conflict("Спочатку відкрийте та звірте зміну ПРРО.");
         }
         if (!Objects.equals(device.activeSignerKeyId(), signerKeyId)) {
-            throw conflict("Тестовий чек має бути підписаний тим самим касиром, який відкрив зміну.");
+            throw conflict("Чек має бути підписаний тим самим касиром, який відкрив зміну.");
         }
 
         byte[] rroSignature = decodeSignature(request.rroSignatureBase64());
@@ -184,7 +179,7 @@ public class PrroPaymentCheckPreparationService {
         for (PrroPaymentOperationService.ReceiptItem item : source.items()) {
             receiptItems.add(new PrroXmlDocumentBuilder.SaleItem(
                     operationNumber++, null, item.name(), item.amount(),
-                    BigDecimal.ONE, null, TEST_TAX_CODE, null));
+                    BigDecimal.ONE, null, properties.getTaxCode(), null));
         }
         if (receiptItems.isEmpty()) {
             throw conflict("У рахунку не знайдено позицій для формування тестового чека.");
@@ -201,7 +196,7 @@ public class PrroPaymentCheckPreparationService {
                 new PrroXmlDocumentBuilder.ReceiptClosing(
                         closingOperationNumber, operation.localNumber(), source.amount(), source.amount(), null,
                         List.of(new PrroXmlDocumentBuilder.TaxBreakdown(
-                                TEST_TAX_CODE, null, null, null, null, null, null))));
+                                properties.getTaxCode(), null, null, null, null, null, null))));
 
         byte[] signingInput = envelopeBuilder.build(documentBuilder.buildCheck(check), previousSigningInput);
         PrroOperationService.PreparedSigningInput stored = operations.storeSigningInput(
@@ -217,26 +212,17 @@ public class PrroPaymentCheckPreparationService {
 
     private Device findDevice(long branchNo) {
         List<Device> devices = db.query("""
-                SELECT id, rro_fn, environment, active_shift_key, active_signer_key_id
+                SELECT id, rro_fn, active_shift_key, active_signer_key_id
                   FROM prro_devices
                  WHERE branch_no = ? AND enabled = TRUE
                  ORDER BY id
                 """, (rs, rowNum) -> new Device(rs.getLong("id"), rs.getString("rro_fn"),
-                rs.getString("environment"), rs.getString("active_shift_key"),
-                rs.getString("active_signer_key_id")), branchNo);
+                rs.getString("active_shift_key"), rs.getString("active_signer_key_id")), branchNo);
         if (devices.isEmpty()) throw conflict("Для цієї філії не налаштовано активний ПРРО.");
         if (devices.size() != 1) throw conflict("Для філії налаштовано кілька ПРРО.");
         return devices.get(0);
     }
 
-    private void requireTestTarget(String environment) {
-        if (!"TEST".equalsIgnoreCase(environment)
-                || !TEST_HOST.equalsIgnoreCase(properties.getHost())
-                || properties.getPort() != TEST_PORT || !properties.isTlsEnabled()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Тестові платежі дозволено надсилати лише для TEST-ПРРО на cabinet.tax.gov.ua:9443.");
-        }
-    }
 
     private static PreparationResult result(PrroOperationService.Operation operation, Device device,
                                             PrroOperationService.PreparedSigningInput input) {
@@ -282,6 +268,6 @@ public class PrroPaymentCheckPreparationService {
                                     int localNumber, String signerKeyId, String status, long dateTime,
                                     String signingInputBase64, String signingInputSha256,
                                     String previousDocumentSha256) {}
-    private record Device(long id, String rroFn, String environment, String activeShiftKey,
+    private record Device(long id, String rroFn, String activeShiftKey,
                           String activeSignerKeyId) {}
 }
