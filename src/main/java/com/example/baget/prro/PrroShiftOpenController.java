@@ -13,11 +13,14 @@ import org.springframework.web.bind.annotation.*;
 public class PrroShiftOpenController {
     private final PrroShiftOpenPreparationService preparation;
     private final PrroShiftOpenSubmissionService submission;
+    private final PrroShiftOpenCancellationService cancellation;
 
     public PrroShiftOpenController(PrroShiftOpenPreparationService preparation,
-                                   PrroShiftOpenSubmissionService submission) {
+                                   PrroShiftOpenSubmissionService submission,
+                                   PrroShiftOpenCancellationService cancellation) {
         this.preparation = preparation;
         this.submission = submission;
+        this.cancellation = cancellation;
     }
 
     @PostMapping("/prepare")
@@ -32,5 +35,12 @@ public class PrroShiftOpenController {
             @Valid @RequestBody PrroShiftOpenSubmissionService.SubmitRequest request,
             Authentication authentication) {
         return submission.submit(request, authentication);
+    }
+
+    @PostMapping("/cancel-prepared")
+    public PrroShiftOpenCancellationService.CancellationResult cancelPrepared(
+            @Valid @RequestBody PrroShiftOpenCancellationService.CancelRequest request,
+            Authentication authentication) {
+        return cancellation.cancel(request, authentication);
     }
 }
