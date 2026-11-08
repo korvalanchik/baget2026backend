@@ -66,9 +66,9 @@ public class PrroTestCheckSubmissionService {
         if (device == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ПРРО не знайдено.");
         access.requireBranchAccess(user, device.branchNo());
 
-        if (!properties.isTestEndpoint()) {
+        if ("TEST".equals(expectedSource) && !properties.isTestEndpoint()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Тестовий чек дозволено надсилати лише на cabinet.tax.gov.ua:9443.");
+                    "Синтетичний тестовий чек дозволено надсилати лише на TEST API ДПС.");
         }
         if (!Objects.equals(device.activeShiftKey(), operation.shiftKey())
                 || !Objects.equals(device.activeSignerKeyId(), operation.signerKeyId())) {
@@ -87,7 +87,7 @@ public class PrroTestCheckSubmissionService {
         if (prepared == null || prepared.dpsDateTime() <= 0 || prepared.bytes().length == 0
                 || operation.localNumber() <= 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Підготовлені параметри тестового CHK відсутні або некоректні.");
+                    "Підготовлені параметри CHK відсутні або некоректні.");
         }
 
         final byte[] signedBytes;
