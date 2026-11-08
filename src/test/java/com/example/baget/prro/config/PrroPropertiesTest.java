@@ -12,6 +12,7 @@ class PrroPropertiesTest {
 
         assertEquals("TEST", properties.getEndpointMode());
         assertTrue(properties.isTestEndpoint());
+        assertEquals("Н", properties.getTaxCode());
         assertDoesNotThrow(properties::validateEndpoint);
     }
 
@@ -23,6 +24,10 @@ class PrroPropertiesTest {
         properties.setPort(443);
         assertEquals("PRODUCTION", properties.getEndpointMode());
         assertFalse(properties.isTestEndpoint());
+        assertThrows(IllegalStateException.class, properties::validateEndpoint);
+        assertThrows(IllegalStateException.class, properties::getTaxCode);
+
+        properties.setTaxCode("Н"); // Explicitly confirmed tax code for this deployment.
         assertDoesNotThrow(properties::validateEndpoint);
 
         properties.setHost("prro2.tax.gov.ua");

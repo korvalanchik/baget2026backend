@@ -21,7 +21,7 @@ public class PrroProperties {
     private int port = TEST_PORT;
     private boolean tlsEnabled = true;
     private boolean enabled = false;
-    private String taxCode = "Н";
+    private String taxCode;
     private long rpcDeadlineMillis = 15_000;
 
     public String getHost() { return host; }
@@ -35,7 +35,12 @@ public class PrroProperties {
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
-    public String getTaxCode() { return taxCode; }
+    public String getTaxCode() {
+        if (taxCode != null && !taxCode.isBlank()) return taxCode;
+        if (isTestEndpoint()) return "Н";
+        throw new IllegalStateException(
+                "BAGET_PRRO_TAX_CODE must be explicitly configured for the DPS production endpoint.");
+    }
 
     public void setTaxCode(String taxCode) {
         if (taxCode == null || taxCode.isBlank()
@@ -64,6 +69,9 @@ public class PrroProperties {
             throw new IllegalStateException(
                     "Unsupported DPS PRRO endpoint. Use cabinet.tax.gov.ua:9443 (TEST) "
                             + "or prro.tax.gov.ua:443 / prro2.tax.gov.ua:443 (PRODUCTION), with TLS enabled.");
+        }
+        if ("PRODUCTION".equals(getEndpointMode())) {
+            getTaxCode();
         }
     }
 }
