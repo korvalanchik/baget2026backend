@@ -89,7 +89,8 @@ public class PrroOperationService {
                     "PRRO operation was not in expected state " + expected);
         }
 
-        if (before.sourceType().equals("SHIFT_OPEN") && next == Status.REJECTED) {
+        if (before.sourceType().equals("SHIFT_OPEN")
+                && (next == Status.REJECTED || next == Status.CANCELLED)) {
             jdbcTemplate.update("""
                     UPDATE prro_devices
                        SET active_shift_key = NULL, active_signer_key_id = NULL
@@ -417,12 +418,13 @@ public class PrroOperationService {
 
     private void validateTransition(Status expected, Status next) {
         boolean allowed = switch (expected) {
-            case PREPARED -> next == Status.SIGNED || next == Status.REJECTED;
+            case PREPARED -> next == Status.SIGNED || next == Status.REJECTED
+                    || next == Status.CANCELLED;
             case SIGNED -> next == Status.SENDING || next == Status.REJECTED;
             case SENDING -> next == Status.FISCALIZED || next == Status.REJECTED
                     || next == Status.UNKNOWN_RESULT;
             case UNKNOWN_RESULT -> next == Status.FISCALIZED || next == Status.REJECTED;
-            case FISCALIZED, REJECTED -> false;
+            case FISCALIZED, REJECTED, CANCELLED -> false;
         };
         if (!allowed) {
             throw new IllegalArgumentException("Invalid PRRO state transition: " + expected + " -> " + next);
@@ -484,7 +486,7 @@ public class PrroOperationService {
     }
 
     public enum Status {
-        PREPARED, SIGNED, SENDING, FISCALIZED, REJECTED, UNKNOWN_RESULT
+        PREPARED, SIGNED, SENDING, FISCALIZED, REJECTED, UNKNOWN_RESULT, CANCELLED
     }
 
     public static class IdempotencyConflictException extends RuntimeException {
