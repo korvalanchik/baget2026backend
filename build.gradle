@@ -50,13 +50,13 @@ dependencies {
     implementation('com.google.auth:google-auth-library-oauth2-http:1.46.0')
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     testImplementation 'junit:junit:4.13.1'
-    annotationProcessor('org.projectlombok:lombok')
-    compileOnly('org.projectlombok:lombok')
+    annotationProcessor('org.projectlombok:lombok:1.18.42')
+    compileOnly('org.projectlombok:lombok:1.18.42')
     runtimeOnly('com.mysql:mysql-connector-j')
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-    testCompileOnly('org.projectlombok:lombok')
-    testAnnotationProcessor('org.projectlombok:lombok')
+    testCompileOnly('org.projectlombok:lombok:1.18.42')
+    testAnnotationProcessor('org.projectlombok:lombok:1.18.42')
     testImplementation('org.springframework.boot:spring-boot-starter-test')
     testImplementation('org.junit.jupiter:junit-jupiter-api:5.10.1')
     testRuntimeOnly('org.junit.jupiter:junit-jupiter-engine:5.10.1')
