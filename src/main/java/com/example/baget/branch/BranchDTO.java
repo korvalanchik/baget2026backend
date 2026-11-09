@@ -13,5 +13,9 @@ public class BranchDTO {
 
     private Long branchNo;
     private String name;
+    private String address;
 
+    public BranchDTO(Long branchNo, String name) {
+        this(branchNo, name, null);
+    }
 }
