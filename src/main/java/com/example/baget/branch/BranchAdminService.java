@@ -33,7 +33,7 @@ public class BranchAdminService {
         branch.setName(name);
         branch.setAddress(normalizeAddress(request.address()));
         branch.setActive(request.active() == null || request.active());
-        return toDto(branchRepository.save(branch));
+        return toDto(branchRepository.saveAndFlush(branch));
     }
 
     @Transactional
