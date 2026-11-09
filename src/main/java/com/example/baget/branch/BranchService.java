@@ -19,7 +19,7 @@ public class BranchService {
 
         return user.getAllowedBranches().stream()
                 .filter(Branch::isActive)
-                .map(b -> new BranchDTO(b.getBranchNo(), b.getName()))
+                .map(b -> new BranchDTO(b.getBranchNo(), b.getName(), b.getAddress()))
                 .toList();
     }
 }
