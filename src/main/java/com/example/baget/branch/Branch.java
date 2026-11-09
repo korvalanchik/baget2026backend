@@ -23,6 +23,12 @@ public class Branch {
     @Column(name = "BranchName", nullable = false, unique = true, length = 50)
     private String name;
 
+    @Column(length = 255)
+    private String address;
+
+    @Column(nullable = false)
+    private boolean active = true;
+
     @ManyToMany(mappedBy = "allowedBranches")
     private Set<User> users;
 }

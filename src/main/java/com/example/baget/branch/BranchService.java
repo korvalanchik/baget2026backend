@@ -13,17 +13,13 @@ import java.util.List;
 public class BranchService {
     private final UsersRepository usersRepository;
 
-//    public BranchService(final UsersRepository usersRepository) {
-//        this.usersRepository = usersRepository;
-//    }
     public List<BranchDTO> allowedBranches(String username) {
-
         User user = usersRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException(username));
 
         return user.getAllowedBranches().stream()
-                .map(b -> new BranchDTO(b.getBranchNo(), b.getName()))
+                .filter(Branch::isActive)
+                .map(b -> new BranchDTO(b.getBranchNo(), b.getName(), b.getAddress()))
                 .toList();
     }
-
 }
