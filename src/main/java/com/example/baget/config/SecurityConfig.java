@@ -75,7 +75,9 @@ public class SecurityConfig {
                                 return new AuthorizationDecision(true);
                             }
 
-                            // Couriers must not use other authenticated APIs even if they\n                            // combine ROLE_COURIER with another non-admin role.\n                            String path = context.getRequest().getServletPath();
+                            // Couriers must not use other authenticated APIs even if they
+                            // combine ROLE_COURIER with another non-admin role.
+                            String path = context.getRequest().getServletPath();
                             boolean allowed = "/auth/check-role".equals(path)
                                     || "/api/branch/manager".equals(path)
                                     || "/api/warehouse/assortment".equals(path)
