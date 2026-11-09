@@ -94,7 +94,7 @@ public class PrroShiftCloseSubmissionService {
                 .setCheckType(Check.Type.ZREPORT)
                 .build();
         try {
-            return result(submission.submitSignedDocument(operation.id(), check));
+            return result(submission.submitSignedDocument(operation.id(), check, request.rroSignatureBase64()));
         } catch (PrroSubmissionService.SubmissionOutcomeUnknownException ex) {
             return result(operations.get(operation.id()));
         }
@@ -115,7 +115,8 @@ public class PrroShiftCloseSubmissionService {
         }
     }
 
-    public record SubmitRequest(long operationId, String signerKeyId, String signedPayloadBase64) {
+    public record SubmitRequest(long operationId, String signerKeyId, String signedPayloadBase64,
+                               String rroSignatureBase64) {
         public SubmitRequest {
             if (operationId <= 0) throw new IllegalArgumentException("operationId must be positive");
             if (signerKeyId == null || signerKeyId.isBlank() || signerKeyId.length() > 128)
@@ -123,6 +124,9 @@ public class PrroShiftCloseSubmissionService {
             if (signedPayloadBase64 == null || signedPayloadBase64.isBlank()
                     || signedPayloadBase64.length() > 400_000)
                 throw new IllegalArgumentException("signedPayloadBase64 is required");
+            if (rroSignatureBase64 == null || rroSignatureBase64.isBlank()
+                    || rroSignatureBase64.length() > 100_000)
+                throw new IllegalArgumentException("rroSignatureBase64 is required");
         }
     }
 
