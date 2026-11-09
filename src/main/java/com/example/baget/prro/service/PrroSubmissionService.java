@@ -1,7 +1,9 @@
 package com.example.baget.prro.service;
 
 import com.example.baget.prro.client.DpsPrroGrpcClient;
+import com.google.protobuf.ByteString;
 import com.programika.rro.ws.chk.Check;
+import com.programika.rro.ws.chk.CheckRequest;
 import com.programika.rro.ws.chk.CheckResponse;
 import io.grpc.StatusRuntimeException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Objects;
 
@@ -34,8 +37,10 @@ public class PrroSubmissionService {
         this.archive = Objects.requireNonNull(archive, "archive");
     }
 
-    public PrroOperationService.Operation submitSignedDocument(long operationId, Check check) {
+    public PrroOperationService.Operation submitSignedDocument(long operationId, Check check,
+                                                                  String rroSignatureBase64) {
         Objects.requireNonNull(check, "check");
+        CheckRequest signedRroRequest = signedRroRequest(rroSignatureBase64);
         PrroOperationService.Operation operation = operations.get(operationId);
 
         if (operation.status() != PrroOperationService.Status.SIGNED) {
@@ -72,8 +77,12 @@ public class PrroSubmissionService {
 
         int responseCode = response.getStatusValue();
         if (responseCode == CheckResponse.Status.OK.getNumber()) {
+            CheckResponse archiveResponse = response;
+            if (response.getDataSign().isEmpty()) {
+                archiveResponse = findArchivedResponse(response, signedRroRequest);
+            }
             try {
-                return archive.completeFiscalized(operationId, signedHash, response);
+                return archive.completeFiscalized(operationId, signedHash, archiveResponse);
             } catch (RuntimeException archiveFailure) {
                 // DPS has accepted the document, but its original response could not
                 // be committed to the local archive. Keep the document ID and block
@@ -102,6 +111,52 @@ public class PrroSubmissionService {
                 responseCode, response.getErrorMessage().isBlank()
                         ? "DPS rejected the document with status " + responseCode
                         : response.getErrorMessage());
+    }
+
+    /**
+     * sendChkV2 may acknowledge a fiscal document without returning data_sign.
+     * In that case, immediately read lastChk while this operation remains SENDING.
+     * The operation-order guard prevents another submission for this device until
+     * the current operation has been finalized. Never attach bytes from a different
+     * DPS document, even if lastChk itself reports OK.
+     */
+    private CheckResponse findArchivedResponse(CheckResponse submitted, CheckRequest signedRroRequest) {
+        try {
+            CheckResponse lastCheck = client.getLastCheck(signedRroRequest);
+            if (lastCheck.getStatus() != CheckResponse.Status.OK
+                    || lastCheck.getDataSign().isEmpty()
+                    || submitted.getId().isBlank()
+                    || !submitted.getId().equals(lastCheck.getId())) {
+                return submitted;
+            }
+            return submitted.toBuilder()
+                    .setDataSign(lastCheck.getDataSign())
+                    .setIdSign(lastCheck.getIdSign())
+                    .build();
+        } catch (RuntimeException ignored) {
+            // DPS already acknowledged sendChkV2. Keep the fiscalized operation,
+            // but let the archive record MISSING_DATA so it can be reconciled later.
+            return submitted;
+        }
+    }
+
+    private static CheckRequest signedRroRequest(String signatureBase64) {
+        if (signatureBase64 == null || signatureBase64.isBlank()
+                || signatureBase64.length() > 100_000) {
+            throw new IllegalArgumentException("A signed RRO fiscal-number request is required");
+        }
+        final byte[] signature;
+        try {
+            signature = Base64.getDecoder().decode(signatureBase64);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("RRO signature must be valid Base64", ex);
+        }
+        if (signature.length == 0 || signature.length > 64 * 1024) {
+            throw new IllegalArgumentException("RRO signature has an invalid size");
+        }
+        return CheckRequest.newBuilder()
+                .setRroFnSign(ByteString.copyFrom(signature))
+                .build();
     }
 
     private static Check.Type documentType(String documentType) {
