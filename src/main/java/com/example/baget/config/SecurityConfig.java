@@ -46,16 +46,15 @@ public class SecurityConfig {
                 }))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-//        Set permissions on endpoints
                 .authorizeHttpRequests(auth -> auth
-//            our public endpoints
+                        .requestMatchers("/api/admin/branches/**").hasRole("ADMIN")
                         .requestMatchers("/api/users").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/users/{id}").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/authentication-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/favicon.ico").permitAll()
                         .requestMatchers("/swagger-ui/**", "v3/api-docs/**").permitAll()
-                        .requestMatchers("/auth/signup").hasRole("ADMIN") // ОБМЕЖЕННЯ ПЕРШИМ
+                        .requestMatchers("/auth/signup").hasRole("ADMIN")
                         .requestMatchers("/auth/login", "/auth/password-recovery", "/auth/reset-password").permitAll()
                         .requestMatchers("/api/qrcode/invoices/public/**").permitAll()
                         .requestMatchers("/api/chat").permitAll()
@@ -74,8 +73,6 @@ public class SecurityConfig {
                                 return new AuthorizationDecision(true);
                             }
 
-                            // Couriers must not use other authenticated APIs even if they
-                            // combine ROLE_COURIER with another non-admin role.
                             String path = context.getRequest().getServletPath();
                             boolean allowed = "/auth/check-role".equals(path)
                                     || "/api/branch/manager".equals(path)
@@ -84,10 +81,6 @@ public class SecurityConfig {
                             return new AuthorizationDecision(allowed);
                         }))
                 .authenticationManager(authenticationManager)
-
-//        We need jwt filter before the UsernamePasswordAuthenticationFilter.
-//        Since we need every request to be authenticated before going through spring security filter.
-//        (UsernamePasswordAuthenticationFilter creates a UsernamePasswordAuthenticationToken from a username and password that are submitted in the HttpServletRequest.)
                 .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
      }
