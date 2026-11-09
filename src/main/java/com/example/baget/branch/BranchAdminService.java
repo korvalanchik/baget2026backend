@@ -53,7 +53,7 @@ public class BranchAdminService {
         }
 
         try {
-            return toDto(branchRepository.save(branch));
+            return toDto(branchRepository.saveAndFlush(branch));
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Не вдалося зберегти філію: назва вже використовується.");
         }
