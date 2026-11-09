@@ -82,7 +82,12 @@ public class SecurityConfig {
                                     || path.startsWith("/api/warehouse/assortment/");
                             return new AuthorizationDecision(allowed);
                         }))
-                .authenticationManager(authenticationManager)\n\n//        We need jwt filter before the UsernamePasswordAuthenticationFilter.\n//        Since we need every request to be authenticated before going through Spring security filter.\n//        (UsernamePasswordAuthenticationFilter creates a UsernamePasswordAuthenticationToken from a username and password that are submitted in the HttpServletRequest.)\n                .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class)
+                .authenticationManager(authenticationManager)
+
+//        We need jwt filter before the UsernamePasswordAuthenticationFilter.
+//        Since we need every request to be authenticated before going through Spring security filter.
+//        (UsernamePasswordAuthenticationFilter creates a UsernamePasswordAuthenticationToken from a username and password that are submitted in the HttpServletRequest.)
+                .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
      }
 
