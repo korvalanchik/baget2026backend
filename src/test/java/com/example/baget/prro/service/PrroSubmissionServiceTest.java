@@ -74,7 +74,7 @@ class PrroSubmissionServiceTest {
                 eq("fiscal-archive-failed"), eq(1), contains("could not be archived")))
                 .thenReturn(operation(PrroOperationService.Status.UNKNOWN_RESULT, hash));
 
-        var result = service.submitSignedDocument(7L, check(signedXml));
+        var result = service.submitSignedDocument(7L, check(signedXml), rroSignature());
 
         assertEquals(PrroOperationService.Status.UNKNOWN_RESULT, result.status());
         verify(operations).transition(eq(7L), eq(PrroOperationService.Status.SENDING),
@@ -93,7 +93,7 @@ class PrroSubmissionServiceTest {
                 eq(PrroOperationService.Status.REJECTED), eq(hash), isNull(), eq(-7),
                 eq("Invalid XML"))).thenReturn(operation(PrroOperationService.Status.REJECTED, hash));
 
-        var result = service.submitSignedDocument(7L, check(signedXml));
+        var result = service.submitSignedDocument(7L, check(signedXml), rroSignature());
 
         assertEquals(PrroOperationService.Status.REJECTED, result.status());
     }
