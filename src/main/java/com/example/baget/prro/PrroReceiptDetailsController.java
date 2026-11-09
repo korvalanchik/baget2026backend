@@ -35,7 +35,7 @@ public class PrroReceiptDetailsController {
                        c.full_name, c.edrpou, c.ipn
                   FROM branches b
                   JOIN company_details c ON c.id = 1
-                 WHERE b.BranchNo = ? AND b.active = TRUE
+                 WHERE b.BranchNo = ?
                 """, (rs, row) -> {
             String ipn = rs.getString("ipn");
             boolean vatPayer = ipn != null && !ipn.isBlank();
@@ -57,6 +57,10 @@ public class PrroReceiptDetailsController {
                 || details.taxId() == null || details.taxId().isBlank()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Заповніть найменування суб'єкта господарювання та його податковий номер у company_details.");
+        }
+        if (details.branchAddress() == null || details.branchAddress().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Заповніть адресу господарської одиниці у налаштуваннях філії.");
         }
         return details;
     }
