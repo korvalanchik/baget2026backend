@@ -52,6 +52,7 @@ class PrroSubmissionServiceTest {
                 .setDataSign(ByteString.copyFrom(new byte[]{0x30, 0x01, 0x02}))
                 .setIdSign(ByteString.copyFrom(new byte[]{0x30, 0x01, 0x03}))
                 .build());
+        verify(client, never()).getLastCheck(any(com.programika.rro.ws.chk.CheckRequest.class));
     }
 
     @Test
