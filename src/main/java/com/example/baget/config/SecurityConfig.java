@@ -50,6 +50,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
 //            our public endpoints
                         .requestMatchers("/api/admin/branches", "/api/admin/branches/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/company-details", "/api/admin/company-details/**").hasRole("ADMIN")
                         .requestMatchers("/api/users").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/users/{id}").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
