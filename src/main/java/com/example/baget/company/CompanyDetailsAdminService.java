@@ -36,7 +36,7 @@ public class CompanyDetailsAdminService {
 
     @Transactional
     public CompanyDetailsAdminDTO update(CompanyDetailsAdminRequest request) {
-        int updated = db.update("""
+        db.update("""
                 UPDATE company_details
                    SET full_name = ?, edrpou = ?, ipn = ?, address = ?
                  WHERE id = ?
@@ -46,11 +46,6 @@ public class CompanyDetailsAdminService {
                 normalize(request.ipn()),
                 normalize(request.address()),
                 COMPANY_DETAILS_ID);
-
-        if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Не знайдено запис реквізитів суб'єкта господарювання. Зверніться до технічної підтримки.");
-        }
 
         return get();
     }
