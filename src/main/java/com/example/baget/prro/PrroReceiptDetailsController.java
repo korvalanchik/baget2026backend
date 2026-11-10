@@ -56,11 +56,11 @@ public class PrroReceiptDetailsController {
         if (details.companyName() == null || details.companyName().isBlank()
                 || details.taxId() == null || details.taxId().isBlank()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Заповніть найменування суб'єкта господарювання та його податковий номер у company_details.");
+                    "Не заповнені реквізити суб'єкта господарювання. Адміністратор має відкрити Налаштування → Реквізити підприємства та вказати найменування і ЄДРПОУ / РНОКПП або ІПН платника ПДВ.");
         }
         if (details.branchAddress() == null || details.branchAddress().isBlank()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Заповніть адресу господарської одиниці у налаштуваннях філії.");
+                    "Не вказано адресу цієї господарської одиниці. Адміністратор має відкрити Налаштування → Керування філіями та заповнити адресу філії.");
         }
         return details;
     }
