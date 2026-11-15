@@ -191,10 +191,17 @@ public class PrroPaymentOperationService {
         User user = access.requireOperationalUser(authentication);
         access.requireBranchAccess(user, branchNo);
         List<RecentRequest> requests = db.query("""
-                SELECT request_key, customer_id, branch_no, payload, result, created_at
-                  FROM customer_payment_requests
-                 WHERE branch_no = ?
-                 ORDER BY created_at DESC
+                SELECT p.request_key, p.customer_id, p.branch_no, p.payload, p.result, p.created_at
+                  FROM customer_payment_requests p
+                 WHERE p.branch_no = ?
+                   AND NOT EXISTS (
+                       SELECT 1
+                         FROM prro_payment_operation_links l
+                         JOIN prro_operations o ON o.id = l.operation_id
+                        WHERE l.payment_request_key = p.request_key
+                          AND o.status = 'FISCALIZED'
+                   )
+                 ORDER BY p.created_at DESC
                  LIMIT 40
                 """, (rs, rowNum) -> new RecentRequest(rs.getString("request_key"),
                 rs.getLong("customer_id"), rs.getLong("branch_no"), rs.getString("payload"),
@@ -214,6 +221,9 @@ public class PrroPaymentOperationService {
                         """, rs -> rs.next()
                         ? new OperationLinkState(rs.getString("status"), rs.getString("fiscal_document_id"))
                         : new OperationLinkState("NOT_PREPARED", null), item.requestKey());
+                // Successfully fiscalized payments are already represented in the
+                // immutable DPS archive; keep only actionable/in-progress queue rows here.
+                if ("FISCALIZED".equals(state.status())) continue;
                 result.add(new RecentPayment(item.requestKey(), item.createdAt() == null
                         ? "" : item.createdAt().toInstant().toString(), source.documentLabel(),
                         source.amount(), source.paymentName(), state.status(), state.fiscalDocumentId(),

@@ -23,7 +23,7 @@ class ProductInvoiceProcessorTest {
  @BeforeEach void setup(){
   db=mock(JdbcTemplate.class);access=mock(BillingAccess.class);invoices=mock(InvoiceRepository.class);transactions=mock(CustomerTransactionRepository.class);orchestrator=mock(PaymentOrchestrator.class);
   var customers=mock(CustomerRepository.class);var branches=mock(BranchRepository.class);var numbering=mock(InvoiceServiceUtil.class);
-  user=new User();user.setUsername("accountant");auth=mock(Authentication.class);when(access.user(auth)).thenReturn(user);
+  user=new User();user.setUsername("accountant");auth=mock(Authentication.class);when(auth.getName()).thenReturn("accountant");when(access.user(auth)).thenReturn(user);
   var customer=new Customer();customer.setCustNo(7L);when(customers.findById(7L)).thenReturn(Optional.of(customer));
   var branch=new Branch();when(branches.findById(1L)).thenReturn(Optional.of(branch));when(numbering.generateTodayCode()).thenReturn(26092026001L);
   when(invoices.saveAndFlush(any())).thenAnswer(i->{Invoice inv=i.getArgument(0);inv.setId(42L);return inv;});
@@ -155,12 +155,25 @@ class ProductInvoiceProcessorTest {
   var r=new ProductInvoiceProcessor.Payment("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",new BigDecimal("20.00"),BigDecimal.ZERO,new BigDecimal("100.00"),"");
   assertThrows(PreviewException.class,()->service.pay(42,r,auth));verifyNoInteractions(settlement);
  }
+ @Test void bankPaymentRequiresExplicitPaymentInstrument() {
+  when(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,42L)).thenReturn(1L);
+  when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,42L)).thenReturn(7L);
+  when(ledger.calculateInvoiceDebt(42L)).thenReturn(new BigDecimal("100.00"));
+  when(db.queryForList("SELECT kind FROM cash_accounts WHERE id = ?",String.class,99L)).thenReturn(List.of("BANK"));
+  var r=new ProductInvoiceProcessor.Payment("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",new BigDecimal("20.00"),BigDecimal.ZERO,new BigDecimal("100.00"),"Оплата",99L);
+  var error=assertThrows(PreviewException.class,()->service.pay(42,r,auth));
+  assertEquals("Для банківського рахунку оберіть засіб оплати",error.getMessage());
+  verifyNoInteractions(settlement);
+ }
  @Test void paymentDelegatesToExistingSettlement() {
   when(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,42L)).thenReturn(1L);
   when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,42L)).thenReturn(7L);
   when(ledger.calculateInvoiceDebt(42L)).thenReturn(new BigDecimal("100.00"));
+  when(db.queryForList("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1",Long.class,42L)).thenReturn(List.of(1L));
+  when(settlement.settleInvoice(any(InvoicePaymentRequest.class),eq(auth))).thenReturn(List.of());
   var r=new ProductInvoiceProcessor.Payment("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",new BigDecimal("20.00"),new BigDecimal("10.00"),new BigDecimal("100.00"),"Оплата");
   service.pay(42,r,auth);
   verify(settlement).settleInvoice(new InvoicePaymentRequest(null,42L,null,new BigDecimal("20.00"),new BigDecimal("10.00"),"Оплата"),auth);
+  verify(db).update(contains("INSERT INTO customer_payment_requests"),eq(r.requestKey()),eq(7L),eq(1L),eq("accountant"),anyString(),anyString());
  }
 }

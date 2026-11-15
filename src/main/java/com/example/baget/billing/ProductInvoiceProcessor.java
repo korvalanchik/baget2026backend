@@ -193,8 +193,11 @@ public class ProductInvoiceProcessor {
  public record Payment(@NotBlank @Size(max=36) String requestKey,
      @NotNull @DecimalMin("0") @Digits(integer=15,fraction=2) BigDecimal amount,
      @NotNull @DecimalMin("0") @Digits(integer=15,fraction=2) BigDecimal allocationAmount,
-     @NotNull @Positive @Digits(integer=15,fraction=2) BigDecimal expectedDebt,@Size(max=1000) String note,@Positive Long cashAccountId){
-  public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note){this(requestKey,amount,allocationAmount,expectedDebt,note,null);}
+     @NotNull @Positive @Digits(integer=15,fraction=2) BigDecimal expectedDebt,@Size(max=1000) String note,@Positive Long cashAccountId,
+     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+     @jakarta.validation.constraints.Pattern(regexp = "CARD_POS|INTERNET_ACQUIRING|QR_TRANSFER|BANK_TRANSFER") String paymentInstrument){
+  public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note){this(requestKey,amount,allocationAmount,expectedDebt,note,null,null);}
+  public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note,Long cashAccountId){this(requestKey,amount,allocationAmount,expectedDebt,note,cashAccountId,null);}
  }
  public Map<String,Object> pay(long id,Payment r,Authentication a){
   var user=access.user(a);access.invoice(user,id);
@@ -206,7 +209,24 @@ public class ProductInvoiceProcessor {
   var debt=ledger.calculateInvoiceDebt(id);
   if(debt.compareTo(r.expectedDebt())!=0)throw conflict("Борг змінився. Оновіть рахунок перед оплатою");
   if(r.amount().add(r.allocationAmount()).signum()<=0 || r.amount().add(r.allocationAmount()).compareTo(debt)>0)throw conflict("Сума оплати та авансу повинна бути додатною й не перевищувати борг");
-  settlement.settleInvoice(new InvoicePaymentRequest(null,id,null,r.amount(),r.allocationAmount(),r.note(),r.cashAccountId()),a);
+  if (r.amount().signum() > 0 && r.cashAccountId() != null) {
+   List<String> accountKinds = db.queryForList("SELECT kind FROM cash_accounts WHERE id = ?", String.class, r.cashAccountId());
+   if (accountKinds.isEmpty()) throw conflict("Касу або рахунок не знайдено");
+   String accountKind = accountKinds.get(0);
+   boolean bank = "BANK".equals(accountKind);
+   if (bank && r.paymentInstrument() == null) throw conflict("Для банківського рахунку оберіть засіб оплати");
+   if (!bank && r.paymentInstrument() != null) throw conflict("Засіб безготівкової оплати можна вказати лише для банківського рахунку");
+  } else if (r.paymentInstrument() != null) {
+   throw conflict("Для засобу оплати спочатку оберіть банківський рахунок");
+  }
+  var settled = settlement.settleInvoice(new InvoicePaymentRequest(null,id,null,r.amount(),r.allocationAmount(),r.note(),r.cashAccountId()),a);
+  List<Long> branchNumbers = db.queryForList("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1", Long.class, id);
+  if (branchNumbers.isEmpty()) throw conflict("Не вдалося визначити філію обліку рахунку для фіскалізації");
+  Long branchNo = branchNumbers.get(0);
+  var fiscalRequest = new com.example.baget.finance.CustomerPayments.Payment(
+      r.requestKey(), branchNo, id, r.amount(), r.allocationAmount(), r.note(), r.cashAccountId(), r.paymentInstrument());
+  db.update("INSERT INTO customer_payment_requests(request_key,customer_id,branch_no,actor,payload,result) VALUES(?,?,?,?,?,?)",
+      r.requestKey(), customer, branchNo, a.getName(), encode(fiscalRequest), encode(settled == null ? List.of() : settled));
   em.flush();finish(r.requestKey(),id);return read(id,a);
  }
  public Map<String,Object> merge(Merge r,Authentication a){
