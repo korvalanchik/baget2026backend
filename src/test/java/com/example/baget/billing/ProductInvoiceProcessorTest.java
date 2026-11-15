@@ -159,8 +159,11 @@ class ProductInvoiceProcessorTest {
   when(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,42L)).thenReturn(1L);
   when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,42L)).thenReturn(7L);
   when(ledger.calculateInvoiceDebt(42L)).thenReturn(new BigDecimal("100.00"));
+  when(db.queryForList("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1",Long.class,42L)).thenReturn(List.of(1L));
+  when(settlement.settleInvoice(any(InvoicePaymentRequest.class),eq(auth))).thenReturn(List.of());
   var r=new ProductInvoiceProcessor.Payment("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",new BigDecimal("20.00"),new BigDecimal("10.00"),new BigDecimal("100.00"),"Оплата");
   service.pay(42,r,auth);
   verify(settlement).settleInvoice(new InvoicePaymentRequest(null,42L,null,new BigDecimal("20.00"),new BigDecimal("10.00"),"Оплата"),auth);
+  verify(db).update(contains("INSERT INTO customer_payment_requests"),eq(r.requestKey()),eq(7L),eq(1L),eq("accountant"),anyString(),anyString());
  }
 }
