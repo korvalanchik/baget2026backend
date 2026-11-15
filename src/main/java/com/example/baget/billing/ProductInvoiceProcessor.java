@@ -194,6 +194,7 @@ public class ProductInvoiceProcessor {
      @NotNull @DecimalMin("0") @Digits(integer=15,fraction=2) BigDecimal amount,
      @NotNull @DecimalMin("0") @Digits(integer=15,fraction=2) BigDecimal allocationAmount,
      @NotNull @Positive @Digits(integer=15,fraction=2) BigDecimal expectedDebt,@Size(max=1000) String note,@Positive Long cashAccountId,
+     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
      @jakarta.validation.constraints.Pattern(regexp = "CARD_POS|INTERNET_ACQUIRING|QR_TRANSFER|BANK_TRANSFER") String paymentInstrument){
   public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note){this(requestKey,amount,allocationAmount,expectedDebt,note,null,null);}
   public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note,Long cashAccountId){this(requestKey,amount,allocationAmount,expectedDebt,note,cashAccountId,null);}
