@@ -155,6 +155,16 @@ class ProductInvoiceProcessorTest {
   var r=new ProductInvoiceProcessor.Payment("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",new BigDecimal("20.00"),BigDecimal.ZERO,new BigDecimal("100.00"),"");
   assertThrows(PreviewException.class,()->service.pay(42,r,auth));verifyNoInteractions(settlement);
  }
+ @Test void bankPaymentRequiresExplicitPaymentInstrument() {
+  when(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,42L)).thenReturn(1L);
+  when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,42L)).thenReturn(7L);
+  when(ledger.calculateInvoiceDebt(42L)).thenReturn(new BigDecimal("100.00"));
+  when(db.queryForList("SELECT kind FROM cash_accounts WHERE id = ?",String.class,99L)).thenReturn(List.of("BANK"));
+  var r=new ProductInvoiceProcessor.Payment("c30b2f11-8dbf-47bd-91f4-317f40ad1af2",new BigDecimal("20.00"),BigDecimal.ZERO,new BigDecimal("100.00"),"Оплата",99L);
+  var error=assertThrows(PreviewException.class,()->service.pay(42,r,auth));
+  assertEquals("Для банківського рахунку оберіть засіб оплати",error.getMessage());
+  verifyNoInteractions(settlement);
+ }
  @Test void paymentDelegatesToExistingSettlement() {
   when(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,42L)).thenReturn(1L);
   when(db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,42L)).thenReturn(7L);
