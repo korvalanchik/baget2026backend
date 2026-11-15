@@ -163,6 +163,12 @@ public class PrroPaymentOperationService {
     @Transactional(readOnly = true)
     public PaymentReceiptSource receiptSource(String paymentRequestKey, long branchNo,
                                                org.springframework.security.core.Authentication authentication) {
+        return receiptSource(paymentRequestKey, branchNo, authentication, null);
+    }
+
+    public PaymentReceiptSource receiptSource(String paymentRequestKey, long branchNo,
+                                               org.springframework.security.core.Authentication authentication,
+                                               String fallbackInstrument) {
         User user = access.requireOperationalUser(authentication);
         access.requireBranchAccess(user, branchNo);
         List<PaymentRequest> rows = db.query("""
