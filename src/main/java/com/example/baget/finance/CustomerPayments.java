@@ -40,6 +40,7 @@ public class CustomerPayments {
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal allocationAmount,
         @Size(max=2000) String note,@Positive Long cashAccountId) {
         public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,null,null);}
+        public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note,Long cashAccountId){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,cashAccountId,null);}
     }
     public com.fasterxml.jackson.databind.JsonNode pay(long customer,Payment r,Authentication a) {
         var u=access.user(a);access.customer(u,customer,r.branchNo());
