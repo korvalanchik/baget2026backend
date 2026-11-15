@@ -38,7 +38,8 @@ public class CustomerPayments {
     public record Payment(@NotBlank @Size(max=36) String requestKey,@Positive long branchNo,@Positive Long invoiceId,
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal amount,
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal allocationAmount,
-        @Size(max=2000) String note,@Positive Long cashAccountId) {
+        @Size(max=2000) String note,@Positive Long cashAccountId,
+        @jakarta.validation.constraints.Pattern(regexp = "CARD_POS|INTERNET_ACQUIRING|QR_TRANSFER|BANK_TRANSFER") String paymentInstrument) {
         public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,null,null);}
         public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note,Long cashAccountId){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,cashAccountId,null);}
     }
