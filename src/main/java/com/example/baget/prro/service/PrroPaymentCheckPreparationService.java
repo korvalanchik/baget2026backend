@@ -85,7 +85,8 @@ public class PrroPaymentCheckPreparationService {
 
         byte[] rroSignature = decodeSignature(request.rroSignatureBase64());
         PrroPaymentOperationService.PaymentReceiptSource source =
-                paymentOperations.receiptSource(paymentRequestKey, request.branchNo(), authentication);
+                paymentOperations.receiptSource(paymentRequestKey, request.branchNo(), authentication,
+                        request.paymentInstrument());
 
         CheckRequest signedRequest = CheckRequest.newBuilder()
                 .setRroFnSign(ByteString.copyFrom(rroSignature)).build();
@@ -263,7 +264,8 @@ public class PrroPaymentCheckPreparationService {
     public record PrepareRequest(@Positive long branchNo,
                                  @NotBlank @Size(max = 32) String fiscalNumber,
                                  @NotBlank @Size(max = 100_000) String rroSignatureBase64,
-                                 @NotBlank @Size(max = 128) String signerKeyId) {}
+                                 @NotBlank @Size(max = 128) String signerKeyId,
+                                 @jakarta.validation.constraints.Pattern(regexp = "CARD_POS|INTERNET_ACQUIRING|QR_TRANSFER|BANK_TRANSFER") String paymentInstrument) {}
     public record PreparationResult(long operationId, String shiftKey, long deviceId, String fiscalNumber,
                                     int localNumber, String signerKeyId, String status, long dateTime,
                                     String signingInputBase64, String signingInputSha256,
