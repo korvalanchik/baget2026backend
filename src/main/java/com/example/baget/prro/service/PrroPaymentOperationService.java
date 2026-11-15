@@ -214,6 +214,9 @@ public class PrroPaymentOperationService {
                         """, rs -> rs.next()
                         ? new OperationLinkState(rs.getString("status"), rs.getString("fiscal_document_id"))
                         : new OperationLinkState("NOT_PREPARED", null), item.requestKey());
+                // Successfully fiscalized payments are already represented in the
+                // immutable DPS archive; keep only actionable/in-progress queue rows here.
+                if ("FISCALIZED".equals(state.status())) continue;
                 result.add(new RecentPayment(item.requestKey(), item.createdAt() == null
                         ? "" : item.createdAt().toInstant().toString(), source.documentLabel(),
                         source.amount(), source.paymentName(), state.status(), state.fiscalDocumentId(),
