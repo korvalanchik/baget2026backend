@@ -39,7 +39,7 @@ public class CustomerPayments {
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal amount,
         @NotNull @DecimalMin("0") @DecimalMax("999999999.99") @Digits(integer=9,fraction=2) BigDecimal allocationAmount,
         @Size(max=2000) String note,@Positive Long cashAccountId) {
-        public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,null);}
+        public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,null,null);}
     }
     public com.fasterxml.jackson.databind.JsonNode pay(long customer,Payment r,Authentication a) {
         var u=access.user(a);access.customer(u,customer,r.branchNo());
@@ -52,6 +52,18 @@ public class CustomerPayments {
             if(((Number)p.get("customer_id")).longValue()!=customer || ((Number)p.get("branch_no")).longValue()!=r.branchNo() || !a.getName().equals(p.get("actor")) || !same(r,parsePayment(p.get("payload").toString())))
                 throw conflict("Цей ключ уже використано для іншого платежу");
             return tree(p.get("result").toString());
+        }
+        if (r.cashAccountId() != null) {
+            String accountKind = db.query("SELECT kind FROM cash_accounts WHERE id = ?",
+                    rs -> rs.next() ? rs.getString(1) : null, r.cashAccountId());
+            if (accountKind == null) throw conflict("Касу або рахунок не знайдено");
+            boolean bank = "BANK".equals(accountKind);
+            if (bank && r.amount().signum() > 0 && r.paymentInstrument() == null)
+                throw conflict("Для банківського рахунку оберіть засіб оплати");
+            if (!bank && r.paymentInstrument() != null)
+                throw conflict("Засіб безготівкової оплати можна вказати лише для банківського рахунку");
+        } else if (r.paymentInstrument() != null) {
+            throw conflict("Для засобу оплати спочатку оберіть банківський рахунок");
         }
         if(r.invoiceId()!=null) {
             access.invoice(u,r.invoiceId());
@@ -69,7 +81,7 @@ public class CustomerPayments {
     private Payment parsePayment(String v) { try{return json.readValue(v,Payment.class);}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);} }
     static boolean same(Payment a,Payment b) {
         return a.requestKey().equals(b.requestKey()) && a.branchNo()==b.branchNo() && Objects.equals(a.invoiceId(),b.invoiceId())
-            && a.amount().compareTo(b.amount())==0 && a.allocationAmount().compareTo(b.allocationAmount())==0 && Objects.equals(a.note(),b.note()) && Objects.equals(a.cashAccountId(),b.cashAccountId());
+            && a.amount().compareTo(b.amount())==0 && a.allocationAmount().compareTo(b.allocationAmount())==0 && Objects.equals(a.note(),b.note()) && Objects.equals(a.cashAccountId(),b.cashAccountId()) && Objects.equals(a.paymentInstrument(),b.paymentInstrument());
     }
     private String encode(Object v) { try{return json.writeValueAsString(v);}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);} }
     private com.fasterxml.jackson.databind.JsonNode tree(String v) { try{return json.readTree(v);}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);} }
