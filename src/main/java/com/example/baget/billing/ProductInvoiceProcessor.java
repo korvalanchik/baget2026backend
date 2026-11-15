@@ -209,9 +209,9 @@ public class ProductInvoiceProcessor {
   if(debt.compareTo(r.expectedDebt())!=0)throw conflict("Борг змінився. Оновіть рахунок перед оплатою");
   if(r.amount().add(r.allocationAmount()).signum()<=0 || r.amount().add(r.allocationAmount()).compareTo(debt)>0)throw conflict("Сума оплати та авансу повинна бути додатною й не перевищувати борг");
   if (r.amount().signum() > 0 && r.cashAccountId() != null) {
-   String accountKind = db.query("SELECT kind FROM cash_accounts WHERE id = ?",
-       rs -> rs.next() ? rs.getString(1) : null, r.cashAccountId());
-   if (accountKind == null) throw conflict("Касу або рахунок не знайдено");
+   List<String> accountKinds = db.queryForList("SELECT kind FROM cash_accounts WHERE id = ?", String.class, r.cashAccountId());
+   if (accountKinds.isEmpty()) throw conflict("Касу або рахунок не знайдено");
+   String accountKind = accountKinds.get(0);
    boolean bank = "BANK".equals(accountKind);
    if (bank && r.paymentInstrument() == null) throw conflict("Для банківського рахунку оберіть засіб оплати");
    if (!bank && r.paymentInstrument() != null) throw conflict("Засіб безготівкової оплати можна вказати лише для банківського рахунку");
@@ -219,9 +219,9 @@ public class ProductInvoiceProcessor {
    throw conflict("Для засобу оплати спочатку оберіть банківський рахунок");
   }
   var settled = settlement.settleInvoice(new InvoicePaymentRequest(null,id,null,r.amount(),r.allocationAmount(),r.note(),r.cashAccountId()),a);
-  Long branchNo = db.query("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1",
-      rs -> rs.next() ? rs.getLong(1) : null, id);
-  if (branchNo == null) throw conflict("Не вдалося визначити філію обліку рахунку для фіскалізації");
+  List<Long> branchNumbers = db.queryForList("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1", Long.class, id);
+  if (branchNumbers.isEmpty()) throw conflict("Не вдалося визначити філію обліку рахунку для фіскалізації");
+  Long branchNo = branchNumbers.get(0);
   var fiscalRequest = new com.example.baget.finance.CustomerPayments.Payment(
       r.requestKey(), branchNo, id, r.amount(), r.allocationAmount(), r.note(), r.cashAccountId(), r.paymentInstrument());
   db.update("INSERT INTO customer_payment_requests(request_key,customer_id,branch_no,actor,payload,result) VALUES(?,?,?,?,?,?)",
