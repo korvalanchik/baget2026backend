@@ -175,7 +175,7 @@ public class PrroPaymentOperationService {
         if (rows.isEmpty()) throw conflict("Платіж не знайдено у вказаній філії");
         PaymentRequest request = rows.get(0);
         access.requireCustomerInBranch(request.customerId(), request.branchNo());
-        return receiptSource(paymentRequestKey, request);
+        return receiptSource(paymentRequestKey, request, null);
     }
 
     /** Lists recent eligible own-business cash/bank payments without customer PII. */
@@ -210,7 +210,8 @@ public class PrroPaymentOperationService {
                         : new OperationLinkState("NOT_PREPARED", null), item.requestKey());
                 result.add(new RecentPayment(item.requestKey(), item.createdAt() == null
                         ? "" : item.createdAt().toInstant().toString(), source.documentLabel(),
-                        source.amount(), source.paymentName(), state.status(), state.fiscalDocumentId()));
+                        source.amount(), source.paymentName(), state.status(), state.fiscalDocumentId(),
+                        source.requiresPaymentInstrument()));
             } catch (ResponseStatusException | IllegalArgumentException ignored) {
                 // Skip reversals, advance-only allocations, partner/non-cash
                 // references, stale requests, and records that cannot be tied
@@ -221,6 +222,10 @@ public class PrroPaymentOperationService {
     }
 
     private PaymentReceiptSource receiptSource(String paymentRequestKey, PaymentRequest request) {
+        return receiptSource(paymentRequestKey, request, null);
+    }
+
+    private PaymentReceiptSource receiptSource(String paymentRequestKey, PaymentRequest request, String fallbackInstrument) {
         Payment payment = resolvePayment(paymentRequestKey, request);
         if (payment.receivedAmount().signum() <= 0) {
             throw conflict("Немає нового надходження коштів для тестового чека.");
@@ -277,9 +282,27 @@ public class PrroPaymentOperationService {
         }
 
         boolean cash = "BRANCH_CASH".equals(accountKind) || "CENTRAL_CASH".equals(accountKind);
+        String instrument = payload.path("paymentInstrument").asText("");
+        if (!cash && instrument.isBlank() && fallbackInstrument != null) instrument = fallbackInstrument;
+        String paymentName;
+        boolean requiresInstrument = false;
+        if (cash) {
+            paymentName = "Готівка";
+        } else if (instrument.isBlank()) {
+            paymentName = "Безготівкова оплата";
+            requiresInstrument = true;
+        } else {
+            paymentName = switch (instrument) {
+                case "CARD_POS" -> "ЕПЗ";
+                case "INTERNET_ACQUIRING" -> "інтернет-еквайринг";
+                case "QR_TRANSFER" -> "переказ через QR-код";
+                case "BANK_TRANSFER" -> "переказ на банківський рахунок";
+                default -> throw conflict("Невідомий засіб безготівкової оплати.");
+            };
+        }
         return new PaymentReceiptSource(paymentRequestKey, request.branchNo(), payment.cashAccountId(),
                 amount, invoiceId, documentLabel, items, cash ? "CASH" : "OTHER",
-                cash ? "Готівка" : "Безготівкова оплата");
+                paymentName, requiresInstrument);
     }
 
     /**
@@ -562,14 +585,15 @@ public class PrroPaymentOperationService {
     public record ReceiptItem(String name, BigDecimal amount) {}
     public record PaymentReceiptSource(String paymentRequestKey, long branchNo, long cashAccountId,
                                        BigDecimal amount, Long invoiceId, String documentLabel,
-                                       List<ReceiptItem> items, String paymentType, String paymentName) {
+                                       List<ReceiptItem> items, String paymentType, String paymentName,
+                                       boolean requiresPaymentInstrument) {
         public PaymentReceiptSource {
             items = items == null ? List.of() : List.copyOf(items);
         }
     }
     public record RecentPayment(String paymentRequestKey, String createdAt, String documentLabel,
                                 BigDecimal amount, String paymentName, String operationStatus,
-                                String fiscalDocumentId) {}
+                                String fiscalDocumentId, boolean requiresPaymentInstrument) {}
     private record ReceiptLineDraft(String name, BigDecimal weight) {}
     private record ProductDimensions(BigDecimal widthMm, BigDecimal heightMm) {}
     private record InvoiceOrderProductRow(long orderNo, BigDecimal invoiceOrderAmount,
