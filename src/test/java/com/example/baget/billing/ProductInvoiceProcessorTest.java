@@ -23,7 +23,7 @@ class ProductInvoiceProcessorTest {
  @BeforeEach void setup(){
   db=mock(JdbcTemplate.class);access=mock(BillingAccess.class);invoices=mock(InvoiceRepository.class);transactions=mock(CustomerTransactionRepository.class);orchestrator=mock(PaymentOrchestrator.class);
   var customers=mock(CustomerRepository.class);var branches=mock(BranchRepository.class);var numbering=mock(InvoiceServiceUtil.class);
-  user=new User();user.setUsername("accountant");auth=mock(Authentication.class);when(access.user(auth)).thenReturn(user);
+  user=new User();user.setUsername("accountant");auth=mock(Authentication.class);when(auth.getName()).thenReturn("accountant");when(access.user(auth)).thenReturn(user);
   var customer=new Customer();customer.setCustNo(7L);when(customers.findById(7L)).thenReturn(Optional.of(customer));
   var branch=new Branch();when(branches.findById(1L)).thenReturn(Optional.of(branch));when(numbering.generateTodayCode()).thenReturn(26092026001L);
   when(invoices.saveAndFlush(any())).thenAnswer(i->{Invoice inv=i.getArgument(0);inv.setId(42L);return inv;});
