@@ -200,7 +200,11 @@ public class ProductInvoiceProcessor {
   public Payment(String requestKey,BigDecimal amount,BigDecimal allocationAmount,BigDecimal expectedDebt,String note,Long cashAccountId){this(requestKey,amount,allocationAmount,expectedDebt,note,cashAccountId,null);}
  }
  public Map<String,Object> pay(long id,Payment r,Authentication a){
-  var user=access.user(a);access.invoice(user,id);
+  var user=access.user(a);
+  boolean bankPayment=r.amount().signum()>0 && r.cashAccountId()!=null
+          && "BANK".equals(db.query("SELECT kind FROM cash_accounts WHERE id=?",
+                  rs->rs.next()?rs.getString(1):null,r.cashAccountId()));
+  access.invoicePayment(user,id,bankPayment);
   if(db.queryForObject("SELECT COUNT(*) FROM invoice_products WHERE invoice_id=?",Long.class,id)==0)throw conflict("Це рахунок старого формату");
   var previous=begin(r.requestKey(),"PAYMENT",Map.of("invoiceId",id,"payment",r),user);if(previous!=null)return read(previous,a);
   long customer=db.queryForObject("SELECT customer_id FROM invoices WHERE id=?",Long.class,id);
