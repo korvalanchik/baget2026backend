@@ -52,9 +52,13 @@ public class CashService {
  public Object receive(Receive r,Authentication a){var u=user(a);if(!editor(u))throw denied();serialize();var rows=db.queryForList("SELECT * FROM cash_transfers WHERE id=? FOR UPDATE",r.transferId());if(rows.isEmpty())throw bad("Передачу не знайдено");var transfer=rows.get(0);var dest=account(num(transfer,"destination_id"));view(u,dest);var prior=prior("RECEIVE",r.requestKey(),r,u);if(prior!=null)return prior;if(!"SENT".equals(transfer.get("state")))throw bad("Передачу вже прийнято");if(u.getUsername().equals(transfer.get("sent_by")))throw bad("Передачу має підтвердити інший бухгалтер або адміністратор");if(r.amount()==null||r.amount().signum()<0||r.amount().stripTrailingZeros().scale()>2)throw bad("Некоректна фактична сума");if(r.amount().compareTo(decimal(transfer,"amount"))!=0){db.update("INSERT INTO cash_transfer_notes(transfer_id,observed_amount,note,actor) VALUES(?,?,?,?)",r.transferId(),r.amount(),r.note(),u.getUsername());return remember("RECEIVE",r.requestKey(),r,Map.of("state","SENT","message","Розбіжність записано. Передача залишається в дорозі до з'ясування"),u);}ready(dest);var transit=account(num(transfer,"transit_id"));enough(num(transit,"id"),r.amount());post(transit,"OUT","CASH_TRANSFER",r.amount(),u,r.transferId(),null,r.note());post(dest,"IN","CASH_TRANSFER",r.amount(),u,r.transferId(),null,r.note());db.update("UPDATE cash_transfers SET state='RECEIVED',received_by=?,received_at=CURRENT_TIMESTAMP(6),received_note=? WHERE id=?",u.getUsername(),r.note(),r.transferId());return remember("RECEIVE",r.requestKey(),r,Map.of("saved",true),u);}
  /** Called in the same payment transaction before posting any ledger entries. */
  @Transactional(propagation=Propagation.MANDATORY)
- public long paymentAccount(User u,long branch,Long requested){if(!u.isEnabled())throw denied();branch(u,branch);own(branch);serialize();Long id=requested;
+ public long paymentAccount(User u,long branch,Long requested){if(!u.isEnabled())throw denied();own(branch);serialize();Long id=requested;
   if(id==null){var rows=db.queryForList("SELECT id FROM cash_accounts WHERE code=?", "branch-"+branch);if(rows.isEmpty())throw bad("Для філії не налаштовано касу. Зверніться до адміністратора");id=num(rows.get(0),"id");}
-  var acc=account(id);ready(acc);String kind=acc.get("kind").toString();if("TRANSIT".equals(kind))throw denied();if("BRANCH_CASH".equals(kind)&&num(acc,"branch_no")!=branch)throw denied();if("CENTRAL_CASH".equals(kind)&&!editor(u))throw denied();return id;
+  var acc=account(id);ready(acc);String kind=acc.get("kind").toString();if("TRANSIT".equals(kind))throw denied();
+  boolean branchAllowed=role(u,"ROLE_ADMIN")||u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==branch);
+  boolean accountantBank="BANK".equals(kind)&&role(u,"ROLE_ACCOUNTANT");
+  if(!branchAllowed&&!accountantBank)throw denied();
+  if("BRANCH_CASH".equals(kind)&&num(acc,"branch_no")!=branch)throw denied();if("CENTRAL_CASH".equals(kind)&&!editor(u))throw denied();return id;
  }
  /** No customer/invoice linkage: payroll never changes customer debt. */
  @Transactional(propagation=Propagation.MANDATORY)
