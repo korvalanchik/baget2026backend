@@ -43,6 +43,16 @@ class CashServiceTest {
  @Test void exactRetryPostsNothing()throws Exception {var r=send();when(db.queryForList(startsWith("SELECT actor,operation,payload,result"),eq(key()))).thenReturn(List.of(Map.of("actor","operator","operation","SEND","payload",new ObjectMapper().writeValueAsString(r),"result","{\"id\":40,\"state\":\"SENT\"}")));service.send(r,auth);noLedger();verify(db,never()).update(startsWith("INSERT INTO cash_transfers"),any(Object[].class));}
  @Test void initializedAndOwnBranchRequiredForPayment(){from.put("initialized",false);assertThrows(PreviewException.class,()->service.paymentAccount(user,1,1L));from.put("initialized",true);when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(1L))).thenReturn(0L);assertThrows(PreviewException.class,()->service.paymentAccount(user,1,1L));}
  @Test void paymentCannotSelectForeignBranchOrTransit(){role("ROLE_MANAGER");from.put("branch_no",9L);assertThrows(PreviewException.class,()->service.paymentAccount(user,1,1L));assertThrows(PreviewException.class,()->service.paymentAccount(user,1,3L));assertThrows(PreviewException.class,()->service.paymentAccount(user,1,2L));}
+ @Test void accountantMayUseBankAccountForAnotherOwnBranchInvoice(){
+  role("ROLE_ACCOUNTANT");from.put("kind","BANK");
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(2L))).thenReturn(1L);
+  assertEquals(1L,service.paymentAccount(user,2,1L));
+ }
+ @Test void accountantCannotUseAnotherBranchCashDesk(){
+  role("ROLE_ACCOUNTANT");
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(2L))).thenReturn(1L);
+  assertThrows(PreviewException.class,()->service.paymentAccount(user,2,1L));
+ }
  @SuppressWarnings("unchecked")
  @Test void overviewCanBeScopedToActiveBranch(){
   role("ROLE_MANAGER");var other=new Branch();other.setBranchNo(1L);var studio=new Branch();studio.setBranchNo(8L);user.setAllowedBranches(Set.of(other,studio));

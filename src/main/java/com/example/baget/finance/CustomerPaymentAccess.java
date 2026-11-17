@@ -28,11 +28,23 @@ public class CustomerPaymentAccess {
         Long count=db.queryForObject("SELECT COUNT(*) FROM customer c WHERE c.CustNo=? AND (EXISTS(SELECT 1 FROM orders o WHERE o.CustNo=c.CustNo AND o.BranchNo=?) OR EXISTS(SELECT 1 FROM invoices i JOIN invoice_orders io ON io.invoice_id=i.id JOIN orders o ON o.OrderNo=io.order_no WHERE (i.customer_id=c.CustNo OR i.payer_id=c.CustNo) AND o.BranchNo=?) OR EXISTS(SELECT 1 FROM customer_transactions ct WHERE ct.customer_id=c.CustNo AND ct.branch_id=? AND ct.active=1) OR EXISTS(SELECT 1 FROM partner_customer_movements pm WHERE pm.customer_id=c.CustNo AND pm.branch_no=?))",Long.class,customer,branch,branch,branch,branch);
         if(count==null || count==0) throw denied();
     }
+    public boolean accountant(User u) {
+        return u.getRoles().stream().anyMatch(r->"ROLE_ACCOUNTANT".equals(r.getName()));
+    }
+    public boolean hasBranchAccess(User u,long branch) {
+        return admin(u) || u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==branch);
+    }
     public void invoice(User u,long id) {
+        invoicePayment(u,id,false);
+    }
+    /** Cross-branch access is limited to an accountant recording an actual bank payment. */
+    public void invoicePayment(User u,long id,boolean bankPayment) {
         var branches=db.queryForList("SELECT DISTINCT o.BranchNo FROM invoice_orders io JOIN orders o ON o.OrderNo=io.order_no WHERE io.invoice_id=?",Long.class,id);
         if(branches.isEmpty()) throw denied();
-        for(long b:branches) branch(u,b);
-        for(long b:db.queryForList("SELECT DISTINCT branch_id FROM customer_transactions WHERE invoice_id=? AND type IN ('INVOICE','INVOICE_MERGE_OUT')",Long.class,id)) branch(u,b);
+        boolean crossBranchBankPayment=bankPayment && accountant(u);
+        for(long b:branches) if(!crossBranchBankPayment) branch(u,b);
+        for(long b:db.queryForList("SELECT DISTINCT branch_id FROM customer_transactions WHERE invoice_id=? AND type IN ('INVOICE','INVOICE_MERGE_OUT')",Long.class,id))
+            if(!crossBranchBankPayment) branch(u,b);
     }
     private static PreviewException denied() { return new PreviewException(HttpStatus.FORBIDDEN,"CUSTOMER_PAYMENT_ACCESS","Немає права приймати оплату або доступу до клієнта чи філії"); }
 }

@@ -44,7 +44,13 @@ public class CustomerPayments {
         public Payment(String requestKey,long branchNo,Long invoiceId,BigDecimal amount,BigDecimal allocationAmount,String note,Long cashAccountId){this(requestKey,branchNo,invoiceId,amount,allocationAmount,note,cashAccountId,null);}
     }
     public com.fasterxml.jackson.databind.JsonNode pay(long customer,Payment r,Authentication a) {
-        var u=access.user(a);access.customer(u,customer,r.branchNo());
+        var u=access.user(a);
+        boolean bankInvoicePayment=r.invoiceId()!=null && r.amount().signum()>0 && r.cashAccountId()!=null
+                && "BANK".equals(db.query("SELECT kind FROM cash_accounts WHERE id=?",
+                        rs->rs.next()?rs.getString(1):null,r.cashAccountId()));
+        boolean accountantCrossBranchPayment=bankInvoicePayment && access.accountant(u)
+                && !access.hasBranchAccess(u,r.branchNo());
+        if(!accountantCrossBranchPayment)access.customer(u,customer,r.branchNo());
         try { if(!UUID.fromString(r.requestKey()).toString().equals(r.requestKey())) throw new IllegalArgumentException(); }
         catch(IllegalArgumentException e) { throw conflict("Некоректний ключ платежу"); }
         db.queryForObject("SELECT CustNo FROM customer WHERE CustNo=? FOR UPDATE",Long.class,customer);
@@ -68,7 +74,7 @@ public class CustomerPayments {
             throw conflict("Для засобу оплати спочатку оберіть банківський рахунок");
         }
         if(r.invoiceId()!=null) {
-            access.invoice(u,r.invoiceId());
+            access.invoicePayment(u,r.invoiceId(),bankInvoicePayment);
             db.queryForObject("SELECT id FROM invoices WHERE id=? FOR UPDATE",Long.class,r.invoiceId());
             var invoice=invoices.findById(r.invoiceId()).orElseThrow(()->conflict("Рахунок не знайдено"));
             if(!invoice.getCustomer().getCustNo().equals(customer)) throw conflict("Відкрийте фінанси клієнта, на якого оформлений рахунок");

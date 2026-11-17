@@ -32,15 +32,20 @@ public class InvoiceOperationContextService {
     );
 
     public InvoiceOperationContext resolveContext(InvoicePaymentRequest request, User user) {
+        return resolveContext(request,user,false);
+    }
+
+    public InvoiceOperationContext resolveContext(InvoicePaymentRequest request, User user, boolean bankPayment) {
 
         if (request.invoiceId() != null) {
 
             Invoice invoice = invoiceRepository.findById(request.invoiceId())
                     .orElseThrow(() -> new TransactionException("Інвойс не знайдено"));
 
-            Branch branch = request.branchNo()==null ? resolveInvoiceBranch(invoice.getId()) : branchRepository.findById(request.branchNo()).orElseThrow(()->new TransactionException("Філію приймання коштів не знайдено"));
-
-            validateBranchAccess(user, branch.getBranchNo());
+            Branch branch = resolveInvoiceBranch(invoice.getId());
+            if(request.branchNo()!=null && !request.branchNo().equals(branch.getBranchNo()))
+                throw new TransactionException("Філія платежу не відповідає філії-власнику рахунку");
+            validateBranchAccess(user, branch.getBranchNo(), bankPayment && isAccountant(user));
 
             return new InvoiceOperationContext(
                     user,
@@ -66,11 +71,19 @@ public class InvoiceOperationContextService {
         return new InvoiceOperationContext(user, branch, customer, customer, null);
     }
 
-    private void validateBranchAccess(User user, Long branchNo) {
+    private boolean isAccountant(User user) {
+        return user.getRoles().stream().anyMatch(r->"ROLE_ACCOUNTANT".equals(r.getName()));
+    }
 
-        boolean allowed = user.getRoles().stream().anyMatch(r->r.getName().equals("ROLE_ADMIN")) || user.getAllowedBranches()
-                .stream()
-                .anyMatch(b -> b.getBranchNo().equals(branchNo));
+    private void validateBranchAccess(User user, Long branchNo) {
+        validateBranchAccess(user,branchNo,false);
+    }
+
+    private void validateBranchAccess(User user, Long branchNo, boolean allowAccountantCrossBranch) {
+
+        boolean allowed = user.getRoles().stream().anyMatch(r->r.getName().equals("ROLE_ADMIN"))
+                || (allowAccountantCrossBranch && isAccountant(user))
+                || user.getAllowedBranches().stream().anyMatch(b -> b.getBranchNo().equals(branchNo));
 
         if (!allowed) {
             throw new TransactionException("Немає доступу до філії: " + branchNo);

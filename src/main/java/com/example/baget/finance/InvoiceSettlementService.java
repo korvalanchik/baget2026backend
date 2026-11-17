@@ -53,8 +53,12 @@ public class InvoiceSettlementService {
         User user = usersRepository.findByUsername(username)
                 .orElseThrow(() -> new TransactionException("Користувач не знайдений: " + username));
 
-        InvoiceOperationContext ctx = invoiceOperationContextService.resolveContext(request, user);
-        customerPaymentAccess.invoice(customerPaymentAccess.user(authentication),ctx.invoice().getId());
+        boolean bankPayment = Optional.ofNullable(request.amount()).orElse(BigDecimal.ZERO).signum()>0
+                && request.cashAccountId()!=null
+                && "BANK".equals(db.query("SELECT kind FROM cash_accounts WHERE id=?",
+                        rs->rs.next()?rs.getString(1):null,request.cashAccountId()));
+        InvoiceOperationContext ctx = invoiceOperationContextService.resolveContext(request, user, bankPayment);
+        customerPaymentAccess.invoicePayment(customerPaymentAccess.user(authentication),ctx.invoice().getId(),bankPayment);
         if(db.queryForObject("SELECT COUNT(*) FROM branch_commercial_settings WHERE branch_no=? AND mode='RESELLER'",Long.class,ctx.branch().getBranchNo())>0)
             throw new TransactionException("Кошти клієнтів філії реселлера не надходять у касу підприємства. Окремий довідковий журнал буде додано наступним етапом");
         validateAmounts(request);
