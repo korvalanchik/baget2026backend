@@ -34,6 +34,25 @@ public class BillingAccess {
         if(branches.isEmpty())throw conflict("Рахунок не знайдено");for(long b:branches)branch(u,b);
         for(long b:db.queryForList("SELECT DISTINCT branch_id FROM customer_transactions WHERE invoice_id=? AND type IN ('INVOICE','INVOICE_MERGE_OUT')",Long.class,id))branch(u,b);
     }
+    /**
+     * Payment access is broader only for an accountant making a positive bank
+     * payment. All other invoice operations retain the ordinary branch scope.
+     * Invoice existence and its original branch references are still verified.
+     */
+    public void invoicePayment(User u,long id,boolean bankPayment){
+        if(!bankPayment || !accountant(u) || admin(u)){
+            invoice(u,id);
+            return;
+        }
+        var branches=db.queryForList("SELECT DISTINCT o.BranchNo FROM invoice_orders io JOIN orders o ON o.OrderNo=io.order_no WHERE io.invoice_id=?",Long.class,id);
+        if(branches.isEmpty())throw conflict("Рахунок не знайдено");
+        // The invoice's original branch is intentionally not changed. The
+        // authenticated accountant is only the payment operator.
+        db.queryForList("SELECT DISTINCT branch_id FROM customer_transactions WHERE invoice_id=? AND type IN ('INVOICE','INVOICE_MERGE_OUT')",Long.class,id);
+    }
+    private boolean accountant(User u){
+        return u.getRoles().stream().anyMatch(r->"ROLE_ACCOUNTANT".equals(r.getName()));
+    }
     public static PreviewException conflict(String s){return new PreviewException(HttpStatus.CONFLICT,"PRODUCT_INVOICE_CONFLICT",s);}
     private static PreviewException denied(){return new PreviewException(HttpStatus.FORBIDDEN,"BILLING_ACCESS_DENIED","Немає бухгалтерських прав або доступу до філії");}
 }
