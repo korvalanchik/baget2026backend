@@ -70,6 +70,13 @@ class CashServiceTest {
   when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(900L))).thenReturn(1L);
   assertEquals(2L,service.paymentAccount(user,8,2L,900L));
  }
+ @Test void managerCannotUseCentralCashForResellerInvoice(){
+  role("ROLE_MANAGER");
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(1L))).thenReturn(1L);
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(900L))).thenReturn(1L);
+  assertThrows(PreviewException.class,()->service.paymentAccount(user,1,2L,900L));
+ }
+
  @Test void accountantCanUseBankForResellerInvoiceWithoutBranchAccess(){
   role("ROLE_ACCOUNTANT");
   var bank=account(4,"BANK");
