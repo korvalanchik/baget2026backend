@@ -15,6 +15,7 @@ import com.example.baget.users.User;
 import com.example.baget.util.TransactionException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 
@@ -25,6 +26,7 @@ public class InvoiceOperationContextService {
     private final CustomerRepository customerRepository;
     private final InvoiceRepository invoiceRepository;
     private final LedgerRepository ledgerRepository;
+    private final JdbcTemplate db;
 
     private static final List<LedgerCategory> INVOICE_OWNERSHIP_CATEGORIES = List.of(
             LedgerCategory.INVOICE_ISSUED,
@@ -73,9 +75,9 @@ public class InvoiceOperationContextService {
     }
 
     private boolean ledgerCommercialOwner(Long invoiceId) {
-        return branchRepository != null && invoiceRepository != null
-                && invoiceRepository.findById(invoiceId).isPresent()
-                && new org.springframework.jdbc.core.JdbcTemplatePlaceholder() == null;
+        return db.queryForObject(
+                "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
+                Long.class, invoiceId) > 0;
     }
 
     private boolean isAccountant(User user) {
