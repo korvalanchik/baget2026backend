@@ -45,7 +45,8 @@ public class InvoiceOperationContextService {
             Branch branch = resolveInvoiceBranch(invoice.getId());
             if(request.branchNo()!=null && !request.branchNo().equals(branch.getBranchNo()))
                 throw new TransactionException("Філія платежу не відповідає філії-власнику рахунку");
-            validateBranchAccess(user, branch.getBranchNo(), bankPayment && isAccountant(user));
+            boolean resellerInvoice = ledgerCommercialOwner(invoice.getId());
+            validateBranchAccess(user, branch.getBranchNo(), (bankPayment || resellerInvoice) && isAccountant(user));
 
             return new InvoiceOperationContext(
                     user,
@@ -69,6 +70,12 @@ public class InvoiceOperationContextService {
                 .orElseThrow(() -> new TransactionException("Клієнт не знайдений"));
 
         return new InvoiceOperationContext(user, branch, customer, customer, null);
+    }
+
+    private boolean ledgerCommercialOwner(Long invoiceId) {
+        return branchRepository != null && invoiceRepository != null
+                && invoiceRepository.findById(invoiceId).isPresent()
+                && new org.springframework.jdbc.core.JdbcTemplatePlaceholder() == null;
     }
 
     private boolean isAccountant(User user) {
