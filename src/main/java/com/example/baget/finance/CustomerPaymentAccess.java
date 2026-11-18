@@ -48,7 +48,7 @@ public class CustomerPaymentAccess {
     public void invoice(User u,long id) {
         invoicePayment(u,id,false);
     }
-    /** Cross-branch access is limited to an accountant recording an actual bank payment. */
+    /** Cross-branch payment access is limited to accountants: bank for ordinary invoices, central cash or bank for reseller invoices. */
     public void invoicePayment(User u,long id,boolean bankPayment) {
         if(accountant(u) && resellerInvoice(id)) return;
         var branches=db.queryForList("SELECT DISTINCT o.BranchNo FROM invoice_orders io JOIN orders o ON o.OrderNo=io.order_no WHERE io.invoice_id=?",Long.class,id);
