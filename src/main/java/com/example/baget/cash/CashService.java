@@ -82,7 +82,6 @@ public class CashService {
   boolean resellerInvoice=db.queryForObject(
       "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
       Long.class,invoice)>0;
-  boolean crossBranch=!role(u,"ROLE_ADMIN")&&!u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==branch);
   if(resellerInvoice && role(u,"ROLE_ACCOUNTANT")) {
    return db.queryForList("SELECT a.id,a.name,a.kind FROM cash_accounts a JOIN branch_commercial_settings s ON s.branch_no=a.branch_no AND s.mode='OWN' WHERE a.initialized=1 AND a.kind IN ('BANK','CENTRAL_CASH') ORDER BY a.kind,a.name");
   }
