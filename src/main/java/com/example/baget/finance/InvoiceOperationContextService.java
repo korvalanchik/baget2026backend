@@ -15,6 +15,7 @@ import com.example.baget.users.User;
 import com.example.baget.util.TransactionException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 
@@ -25,6 +26,7 @@ public class InvoiceOperationContextService {
     private final CustomerRepository customerRepository;
     private final InvoiceRepository invoiceRepository;
     private final LedgerRepository ledgerRepository;
+    private final JdbcTemplate db;
 
     private static final List<LedgerCategory> INVOICE_OWNERSHIP_CATEGORIES = List.of(
             LedgerCategory.INVOICE_ISSUED,
@@ -45,7 +47,8 @@ public class InvoiceOperationContextService {
             Branch branch = resolveInvoiceBranch(invoice.getId());
             if(request.branchNo()!=null && !request.branchNo().equals(branch.getBranchNo()))
                 throw new TransactionException("Філія платежу не відповідає філії-власнику рахунку");
-            validateBranchAccess(user, branch.getBranchNo(), bankPayment && isAccountant(user));
+            boolean resellerInvoice = ledgerCommercialOwner(invoice.getId());
+            validateBranchAccess(user, branch.getBranchNo(), (bankPayment || resellerInvoice) && isAccountant(user));
 
             return new InvoiceOperationContext(
                     user,
@@ -69,6 +72,12 @@ public class InvoiceOperationContextService {
                 .orElseThrow(() -> new TransactionException("Клієнт не знайдений"));
 
         return new InvoiceOperationContext(user, branch, customer, customer, null);
+    }
+
+    private boolean ledgerCommercialOwner(Long invoiceId) {
+        return db.queryForObject(
+                "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
+                Long.class, invoiceId) > 0;
     }
 
     private boolean isAccountant(User user) {

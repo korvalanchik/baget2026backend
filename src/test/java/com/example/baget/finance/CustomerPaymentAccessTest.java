@@ -29,16 +29,29 @@ class CustomerPaymentAccessTest {
  @Test void workshopRoleAloneCannotAcceptPayments(){Role role=new Role();role.setName("ROLE_FOREMAN");manager.setRoles(List.of(role));assertThrows(PreviewException.class,()->access.user(new UsernamePasswordAuthenticationToken("manager","",List.of())));}
  @Test void anotherBranchDeniedBeforeCustomerQuery(){assertThrows(PreviewException.class,()->access.customer(manager,10,2));verifyNoInteractions(db);}
  @Test void customerMustBelongToAccessibleBranch(){when(db.queryForObject(anyString(),eq(Long.class),eq(10L),eq(1L),eq(1L),eq(1L),eq(1L))).thenReturn(0L);assertThrows(PreviewException.class,()->access.customer(manager,10,1));}
- @Test void mixedBranchInvoiceRequiresBothBranches(){when(db.queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L))).thenReturn(List.of(1L,2L));assertThrows(PreviewException.class,()->access.invoice(manager,5));}
+ @Test void mixedBranchInvoiceRequiresBothBranches(){when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(0L);when(db.queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L))).thenReturn(List.of(1L,2L));assertThrows(PreviewException.class,()->access.invoice(manager,5));}
  @Test void accountantMayPayCrossBranchInvoiceOnlyWithBankPayment(){
   Role role=new Role();role.setName("ROLE_ACCOUNTANT");manager.setRoles(List.of(role));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(0L);
   when(db.queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L))).thenReturn(List.of(2L));
   when(db.queryForList(startsWith("SELECT DISTINCT branch_id"),eq(Long.class),eq(5L))).thenReturn(List.of(2L));
   access.invoicePayment(manager,5,true);
  }
  @Test void accountantCannotReadCrossBranchInvoiceThroughPaymentAccessWithoutBankPayment(){
   Role role=new Role();role.setName("ROLE_ACCOUNTANT");manager.setRoles(List.of(role));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(0L);
   when(db.queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L))).thenReturn(List.of(2L));
   assertThrows(PreviewException.class,()->access.invoicePayment(manager,5,false));
  }
+ @Test void accountantMayPayResellerInvoiceInCashWithoutAccessToSourceBranches(){
+  Role role=new Role();role.setName("ROLE_ACCOUNTANT");manager.setRoles(List.of(role));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(1L);
+  access.invoicePayment(manager,5,false);
+  verify(db,never()).queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L));
+ }
+ @Test void nonAccountantCannotPayResellerInvoiceEvenWithSourceBranchAccess(){
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(1L);
+  assertThrows(PreviewException.class,()->access.invoicePayment(manager,5,false));
+ }
+
 }

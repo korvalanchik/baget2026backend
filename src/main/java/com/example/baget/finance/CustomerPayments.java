@@ -48,8 +48,10 @@ public class CustomerPayments {
         boolean bankInvoicePayment=r.invoiceId()!=null && r.amount().signum()>0 && r.cashAccountId()!=null
                 && "BANK".equals(db.query("SELECT kind FROM cash_accounts WHERE id=?",
                         rs->rs.next()?rs.getString(1):null,r.cashAccountId()));
-        boolean accountantCrossBranchPayment=bankInvoicePayment && access.accountant(u)
-                && !access.hasBranchAccess(u,r.branchNo());
+        boolean resellerInvoicePayment=r.invoiceId()!=null
+                && access.resellerInvoiceForPartner(u,customer,r.invoiceId());
+        boolean accountantCrossBranchPayment=(bankInvoicePayment && access.accountant(u)
+                && !access.hasBranchAccess(u,r.branchNo())) || resellerInvoicePayment;
         if(!accountantCrossBranchPayment)access.customer(u,customer,r.branchNo());
         try { if(!UUID.fromString(r.requestKey()).toString().equals(r.requestKey())) throw new IllegalArgumentException(); }
         catch(IllegalArgumentException e) { throw conflict("Некоректний ключ платежу"); }

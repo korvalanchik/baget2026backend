@@ -52,12 +52,19 @@ public class CashService {
  public Object receive(Receive r,Authentication a){var u=user(a);if(!editor(u))throw denied();serialize();var rows=db.queryForList("SELECT * FROM cash_transfers WHERE id=? FOR UPDATE",r.transferId());if(rows.isEmpty())throw bad("Передачу не знайдено");var transfer=rows.get(0);var dest=account(num(transfer,"destination_id"));view(u,dest);var prior=prior("RECEIVE",r.requestKey(),r,u);if(prior!=null)return prior;if(!"SENT".equals(transfer.get("state")))throw bad("Передачу вже прийнято");if(u.getUsername().equals(transfer.get("sent_by")))throw bad("Передачу має підтвердити інший бухгалтер або адміністратор");if(r.amount()==null||r.amount().signum()<0||r.amount().stripTrailingZeros().scale()>2)throw bad("Некоректна фактична сума");if(r.amount().compareTo(decimal(transfer,"amount"))!=0){db.update("INSERT INTO cash_transfer_notes(transfer_id,observed_amount,note,actor) VALUES(?,?,?,?)",r.transferId(),r.amount(),r.note(),u.getUsername());return remember("RECEIVE",r.requestKey(),r,Map.of("state","SENT","message","Розбіжність записано. Передача залишається в дорозі до з'ясування"),u);}ready(dest);var transit=account(num(transfer,"transit_id"));enough(num(transit,"id"),r.amount());post(transit,"OUT","CASH_TRANSFER",r.amount(),u,r.transferId(),null,r.note());post(dest,"IN","CASH_TRANSFER",r.amount(),u,r.transferId(),null,r.note());db.update("UPDATE cash_transfers SET state='RECEIVED',received_by=?,received_at=CURRENT_TIMESTAMP(6),received_note=? WHERE id=?",u.getUsername(),r.note(),r.transferId());return remember("RECEIVE",r.requestKey(),r,Map.of("saved",true),u);}
  /** Called in the same payment transaction before posting any ledger entries. */
  @Transactional(propagation=Propagation.MANDATORY)
- public long paymentAccount(User u,long branch,Long requested){if(!u.isEnabled())throw denied();own(branch);serialize();Long id=requested;
+ public long paymentAccount(User u,long branch,Long requested){return paymentAccount(u,branch,requested,null);}
+ @Transactional(propagation=Propagation.MANDATORY)
+ public long paymentAccount(User u,long branch,Long requested,Long invoiceId){if(!u.isEnabled())throw denied();own(branch);serialize();Long id=requested;
   if(id==null){var rows=db.queryForList("SELECT id FROM cash_accounts WHERE code=?", "branch-"+branch);if(rows.isEmpty())throw bad("Для філії не налаштовано касу. Зверніться до адміністратора");id=num(rows.get(0),"id");}
   var acc=account(id);ready(acc);String kind=acc.get("kind").toString();if("TRANSIT".equals(kind))throw denied();
   boolean branchAllowed=role(u,"ROLE_ADMIN")||u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==branch);
+  boolean resellerInvoice=invoiceId!=null && db.queryForObject(
+      "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
+      Long.class,invoiceId)>0;
+  if(resellerInvoice && (!role(u,"ROLE_ACCOUNTANT") || !Set.of("BANK","CENTRAL_CASH").contains(kind)))throw denied();
   boolean accountantBank="BANK".equals(kind)&&role(u,"ROLE_ACCOUNTANT");
-  if(!branchAllowed&&!accountantBank)throw denied();
+  boolean accountantResellerCentralCash=resellerInvoice && "CENTRAL_CASH".equals(kind) && role(u,"ROLE_ACCOUNTANT");
+  if(!branchAllowed&&!accountantBank&&!accountantResellerCentralCash)throw denied();
   if("BRANCH_CASH".equals(kind)&&num(acc,"branch_no")!=branch)throw denied();if("CENTRAL_CASH".equals(kind)&&!editor(u))throw denied();return id;
  }
  /** No customer/invoice linkage: payroll never changes customer debt. */
@@ -68,7 +75,20 @@ public class CashService {
   post(acc,original==null?"OUT":"IN","MANAGER_REWARD",amount,u,null,entryId,original==null?"Виплата винагороди менеджеру":"Скасування помилкового запису виплати; кошти залишаються у касі");
  }
  public Object options(Authentication a){var u=user(a);var args=new ArrayList<Object>();String filter="";if(!role(u,"ROLE_ADMIN")){var ids=u.getAllowedBranches().stream().map(b->b.getBranchNo()).toList();filter=ids.isEmpty()?" AND 1=0":" AND b.BranchNo IN ("+String.join(",",Collections.nCopies(ids.size(),"?"))+")";args.addAll(ids);}return Map.of("branches",db.queryForList("SELECT b.BranchNo AS id,b.BranchName AS name FROM branches b JOIN branch_commercial_settings s ON s.branch_no=b.BranchNo WHERE s.mode='OWN'"+filter+" ORDER BY b.BranchName",args.toArray()),"canEdit",editor(u),"canConfigure",role(u,"ROLE_ADMIN"));}
- public Object invoicePaymentOptions(long invoice,Authentication a){user(a);var rows=db.queryForList("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1",invoice);if(rows.isEmpty())throw bad("Не визначено філію обліку рахунку");return paymentOptions(num(rows.get(0),"branch_id"),a);}
+ public Object invoicePaymentOptions(long invoice,Authentication a){
+  var u=user(a);
+  var rows=db.queryForList("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1",invoice);
+  if(rows.isEmpty())throw bad("Не визначено філію обліку рахунку");
+  long branch=num(rows.get(0),"branch_id");
+  boolean resellerInvoice=db.queryForObject(
+      "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
+      Long.class,invoice)>0;
+  if(resellerInvoice) {
+   if(!role(u,"ROLE_ACCOUNTANT"))throw denied();
+   return db.queryForList("SELECT a.id,a.name,a.kind FROM cash_accounts a JOIN branch_commercial_settings s ON s.branch_no=a.branch_no AND s.mode='OWN' WHERE a.initialized=1 AND a.kind IN ('BANK','CENTRAL_CASH') ORDER BY a.kind,a.name");
+  }
+  return paymentOptions(branch,a);
+ }
  public Object paymentOptions(long branch,Authentication a){var u=user(a);own(branch);boolean crossBranch=!role(u,"ROLE_ADMIN")&&!u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==branch);if(crossBranch&&!role(u,"ROLE_ACCOUNTANT"))throw denied();if(crossBranch)return db.queryForList("SELECT a.id,a.name,a.kind FROM cash_accounts a JOIN branch_commercial_settings s ON s.branch_no=a.branch_no AND s.mode='OWN' WHERE a.initialized=1 AND a.kind='BANK' ORDER BY a.name");branch(u,branch);return db.queryForList("SELECT a.id,a.name,a.kind FROM cash_accounts a JOIN branch_commercial_settings s ON s.branch_no=a.branch_no AND s.mode='OWN' WHERE a.initialized=1 AND (a.kind='BANK' OR (a.kind='BRANCH_CASH' AND a.branch_no=?)"+(editor(u)?" OR a.kind='CENTRAL_CASH'":"")+") ORDER BY a.kind,a.name",branch);}
  public Object overview(Authentication a){return overview(a,null);}
  public Object overview(Authentication a,Long requestedBranch){var u=user(a);if(requestedBranch!=null)branch(u,requestedBranch);var all=db.queryForList("SELECT a.*,b.BranchName AS branchName,COALESCE(SUM(CASE WHEN l.direction='IN' THEN l.amount ELSE -l.amount END),0) AS balance FROM cash_accounts a JOIN branches b ON b.BranchNo=a.branch_no LEFT JOIN ledger_entries l ON l.cash_account_id=a.id GROUP BY a.id,b.BranchName ORDER BY a.id");var visible=all.stream().filter(r->{boolean allowed="BRANCH_CASH".equals(r.get("kind"))?(role(u,"ROLE_ADMIN")||u.getAllowedBranches().stream().anyMatch(b->b.getBranchNo()==num(r,"branch_no"))):editor(u);if(!allowed)return false;return requestedBranch==null||!"BRANCH_CASH".equals(r.get("kind"))||num(r,"branch_no")==requestedBranch;}).toList();

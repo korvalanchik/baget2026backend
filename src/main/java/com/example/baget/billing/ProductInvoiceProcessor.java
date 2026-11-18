@@ -125,6 +125,7 @@ public class ProductInvoiceProcessor {
   header.put("history",db.queryForList("SELECT type,amount,note,created_at AS createdAt FROM customer_transactions WHERE invoice_id=? AND active=1 ORDER BY id",id));
   header.put("mergedInto",db.queryForList("SELECT DISTINCT i.id,i.invoice_no AS invoiceNo FROM invoice_products ip JOIN invoices i ON i.id=ip.invoice_id WHERE ip.source_invoice_id=?",id));
   header.put("partnerId",invoicePartner(id));
+  header.put("branchNo",db.queryForObject("SELECT branch_id FROM ledger_entries WHERE invoice_id=? AND direction='OUT' AND category IN ('INVOICE_ISSUED','INVOICE_MERGE_OUT') ORDER BY created_at DESC,id DESC LIMIT 1",Long.class,id));
   header.put("products",lines);header.put("debt",ledger.calculateInvoiceDebt(id));header.put("availableAdvance",transactions.calculateAvailableAdvance(((Number)header.get("payerId")).longValue()));return header;
  }
  public Map<String,Object> issue(Issue r,Authentication a){

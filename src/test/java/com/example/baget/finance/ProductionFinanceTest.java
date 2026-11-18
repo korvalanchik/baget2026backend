@@ -53,7 +53,7 @@ class ProductionFinanceTest {
         when(processor.process(eq(ctx),eq(request),any())).thenReturn(List.of(payment,advance));
         var service=new PaymentOrchestrator(List.of(processor),ledger,mapper,finance);
         var cash=mock(com.example.baget.cash.CashService.class);
-        when(cash.paymentAccount(ctx.user(),1L,null)).thenReturn(5L);
+        when(cash.paymentAccount(ctx.user(),1L,null,42L)).thenReturn(5L);
         org.springframework.test.util.ReflectionTestUtils.setField(service,"cash",cash);
         service.processPayment(ctx,request,ctx.user());
         var entries=ArgumentCaptor.forClass(LedgerRequest.class);
