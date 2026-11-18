@@ -47,9 +47,8 @@ class CustomerPaymentAccessTest {
   access.invoicePayment(manager,5,false);
   verify(db,never()).queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L));
  }
- @Test void nonAccountantCannotUseResellerInvoiceCrossBranchException(){
+ @Test void nonAccountantCannotPayResellerInvoiceEvenWithSourceBranchAccess(){
   when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(1L);
-  when(db.queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L))).thenReturn(List.of(2L));
   assertThrows(PreviewException.class,()->access.invoicePayment(manager,5,false));
  }
 
