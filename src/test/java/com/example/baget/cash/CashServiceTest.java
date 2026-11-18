@@ -54,6 +54,16 @@ class CashServiceTest {
   assertThrows(PreviewException.class,()->service.paymentAccount(user,2,1L));
  }
  @SuppressWarnings("unchecked")
+ @Test void resellerInvoicePaymentOptionsExposeCentralCashAndBankButNotBranchCash(){
+  role("ROLE_ACCOUNTANT");
+  when(db.queryForList(startsWith("SELECT branch_id FROM ledger_entries"),eq(901L))).thenReturn(List.of(Map.of("branch_id",8L)));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(901L))).thenReturn(1L);
+  when(db.queryForList(argThat(sql->sql.contains("a.kind IN ('BANK','CENTRAL_CASH')")))).thenReturn(List.of(Map.of("id",2L,"kind","CENTRAL_CASH"),Map.of("id",4L,"kind","BANK")));
+  var options=(List<?>)service.invoicePaymentOptions(901L,auth);
+  assertEquals(2,options.size());
+  verify(db).queryForList(argThat(sql->sql.contains("a.kind IN ('BANK','CENTRAL_CASH')")));
+ }
+
  @Test void accountantCanUseCentralCashForResellerInvoiceWithoutBranchAccess(){
   role("ROLE_ACCOUNTANT");
   when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(8L))).thenReturn(1L);
