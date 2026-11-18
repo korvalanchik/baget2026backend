@@ -61,7 +61,7 @@ public class CashService {
   boolean resellerInvoice=invoiceId!=null && db.queryForObject(
       "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
       Long.class,invoiceId)>0;
-  if(resellerInvoice && !role(u,"ROLE_ACCOUNTANT"))throw denied();
+  if(resellerInvoice && (!role(u,"ROLE_ACCOUNTANT") || !Set.of("BANK","CENTRAL_CASH").contains(kind)))throw denied();
   boolean accountantBank="BANK".equals(kind)&&role(u,"ROLE_ACCOUNTANT");
   boolean accountantResellerCentralCash=resellerInvoice && "CENTRAL_CASH".equals(kind) && role(u,"ROLE_ACCOUNTANT");
   if(!branchAllowed&&!accountantBank&&!accountantResellerCentralCash)throw denied();
