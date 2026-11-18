@@ -61,6 +61,7 @@ public class CashService {
   boolean resellerInvoice=invoiceId!=null && db.queryForObject(
       "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
       Long.class,invoiceId)>0;
+  if(resellerInvoice && !role(u,"ROLE_ACCOUNTANT"))throw denied();
   boolean accountantBank="BANK".equals(kind)&&role(u,"ROLE_ACCOUNTANT");
   boolean accountantResellerCentralCash=resellerInvoice && "CENTRAL_CASH".equals(kind) && role(u,"ROLE_ACCOUNTANT");
   if(!branchAllowed&&!accountantBank&&!accountantResellerCentralCash)throw denied();
@@ -82,7 +83,8 @@ public class CashService {
   boolean resellerInvoice=db.queryForObject(
       "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=i.customer_id",
       Long.class,invoice)>0;
-  if(resellerInvoice && role(u,"ROLE_ACCOUNTANT")) {
+  if(resellerInvoice) {
+   if(!role(u,"ROLE_ACCOUNTANT"))throw denied();
    return db.queryForList("SELECT a.id,a.name,a.kind FROM cash_accounts a JOIN branch_commercial_settings s ON s.branch_no=a.branch_no AND s.mode='OWN' WHERE a.initialized=1 AND a.kind IN ('BANK','CENTRAL_CASH') ORDER BY a.kind,a.name");
   }
   return paymentOptions(branch,a);
