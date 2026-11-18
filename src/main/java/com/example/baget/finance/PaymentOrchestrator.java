@@ -40,7 +40,7 @@ public class PaymentOrchestrator {
             throw new TransactionException("Сума оплати має бути більше 0");
         }
 
-        long cashAccountId=cash.paymentAccount(user,ctx.branch().getBranchNo(),request.cashAccountId());
+        long cashAccountId=cash.paymentAccount(user,ctx.branch().getBranchNo(),request.cashAccountId(),ctx.invoice()==null?null:ctx.invoice().getId());
         OffsetDateTime now = OffsetDateTime.now();
 
         List<PaymentProcessor> matchedProcessors  = processors.stream()
