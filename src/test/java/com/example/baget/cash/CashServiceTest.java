@@ -54,6 +54,30 @@ class CashServiceTest {
   assertThrows(PreviewException.class,()->service.paymentAccount(user,2,1L));
  }
  @SuppressWarnings("unchecked")
+ @Test void accountantCanUseCentralCashForResellerInvoiceWithoutBranchAccess(){
+  role("ROLE_ACCOUNTANT");
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(8L))).thenReturn(1L);
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(900L))).thenReturn(1L);
+  assertEquals(2L,service.paymentAccount(user,8,2L,900L));
+ }
+ @Test void accountantCanUseBankForResellerInvoiceWithoutBranchAccess(){
+  role("ROLE_ACCOUNTANT");
+  var bank=account(4,"BANK");
+  when(db.queryForList("SELECT * FROM cash_accounts WHERE id=? FOR UPDATE",4L)).thenReturn(List.of(bank));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(8L))).thenReturn(1L);
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(900L))).thenReturn(1L);
+  assertEquals(4L,service.paymentAccount(user,8,4L,900L));
+ }
+ @Test void accountantCannotUseAnotherBranchCashForResellerInvoice(){
+  role("ROLE_ACCOUNTANT");
+  var foreignCash=account(4,"BRANCH_CASH");foreignCash.put("branch_no",9L);
+  when(db.queryForList("SELECT * FROM cash_accounts WHERE id=? FOR UPDATE",4L)).thenReturn(List.of(foreignCash));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(8L))).thenReturn(1L);
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(9L))).thenReturn(1L);
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(900L))).thenReturn(1L);
+  assertThrows(PreviewException.class,()->service.paymentAccount(user,8,4L,900L));
+ }
+
  @Test void overviewCanBeScopedToActiveBranch(){
   role("ROLE_MANAGER");var other=new Branch();other.setBranchNo(1L);var studio=new Branch();studio.setBranchNo(8L);user.setAllowedBranches(Set.of(other,studio));
   List<Map<String,Object>> accountRows=List.of(Map.of("id",11L,"kind","BRANCH_CASH","branch_no",1L),Map.of("id",88L,"kind","BRANCH_CASH","branch_no",8L));
