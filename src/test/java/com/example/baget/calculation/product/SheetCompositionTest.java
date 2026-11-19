@@ -409,6 +409,16 @@ class SheetCompositionTest {
         assertFalse(glued.lines().stream().anyMatch(l -> l.calculation().partNo() == 27760L));
     }
 
+    @Test void unframedManualHangerDoesNotRequireBacking() throws Exception {
+        var request = new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
+            {"productType":"UNFRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
+             "glass":[{"partNo":27540,"quantityPerProduct":1}],
+             "suspension":{"hangerMode":"MANUAL","hangerPartNo":29650,"includePozzi":false}}
+            """, ProductPreviewRequest.class);
+        var result = products.preview(request, auth("ROLE_LEVEL2"));
+        assertEquals(29650L, line(result,"HANGER").partNo());
+    }
+
     @Test void unframedSheetsHaveNoFrameOrAutomaticAccessories() throws Exception {
         var request = new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
             {"productType":"UNFRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
@@ -487,9 +497,10 @@ class SheetCompositionTest {
         assertEquals(1,mounted.lines().stream().filter(l->l.role().equals("HANGER")).count());
         var noCord=products.preview(mapper.readValue(json.replace("\"includeCord\":true","\"includeCord\":false"),ProductPreviewRequest.class),auth("ROLE_LEVEL2"));
         assertFalse(noCord.lines().stream().anyMatch(l->l.role().equals("CORD")));
-        var crocodile=mapper.readValue(json.replace("\"hangerMode\":\"AUTO\"","\"hangerMode\":\"MANUAL\",\"hangerPartNo\":14450"),ProductPreviewRequest.class);
-        var manualCrocodile=products.preview(mapper.readValue(json.replace("\\\"includeCord\\\":true","\\\"includeCord\\\":false")
-                .replace("\\\"hangerMode\\\":\\\"AUTO\\\"","\\\"hangerMode\\\":\\\"MANUAL\\\",\\\"hangerPartNo\\\":14450"),ProductPreviewRequest.class),auth("ROLE_LEVEL2"));
+        var manualCrocodileRequest=mapper.readValue(json.replace("\"includeCord\":true","\"includeCord\":false")
+                .replace("\"hangerMode\":\"AUTO\"","\"hangerMode\":\"MANUAL\",\"hangerPartNo\":14450"),
+                ProductPreviewRequest.class);
+        var manualCrocodile=products.preview(manualCrocodileRequest,auth("ROLE_LEVEL2"));
         assertEquals(14450L,line(manualCrocodile,"HANGER").partNo());
     }
     @Test void antiframeRejectsPvcWithoutDvp() throws Exception {
