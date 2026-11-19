@@ -194,7 +194,7 @@ class SheetCompositionTest {
             boolean includeMirrorGlue) {
         return new ProductPreviewRequest(ProductPreviewRequest.ProductType.FRAMED_ARTWORK,n(width),n(height),quantity,
                 29340L,null,null,null,null,suspension,null,null,null,null,null,margins,glass,backings,mats,
-                false,false,includeMirrorGlue);
+                false,false,includeMirrorGlue,includeMirrorGlue);
     }
     private ProductPreviewRequest layeredArtwork(String bottom) {
         return grouped("400","600",2,List.of(sheet(12670,2),sheet(27510,1)),
@@ -402,11 +402,22 @@ class SheetCompositionTest {
         verify(repository, never()).findById(28540L);
         var with = mapper.readValue("""
             {"productType":"FRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
-             "framePartNo":29340,"includeMirrorGlue":true}
+             "framePartNo":29340,"includeMirrorGlue":true,"mirrorProduct":true}
             """, ProductPreviewRequest.class);
         var glued = products.preview(with, auth("ROLE_LEVEL2"));
         eq("1.4", line(glued,"MIRROR_GLUE").totalConsumption());
         assertFalse(glued.lines().stream().anyMatch(l -> l.calculation().partNo() == 27760L));
+    }
+
+    @Test void customerSuppliedMirrorUsesMirrorRulesWithoutAddingMirrorMaterialOrGlue() {
+        var request = new ProductPreviewRequest(ProductPreviewRequest.ProductType.FRAMED_ARTWORK,
+                n("300"), n("400"), 1, 29340L, null, null, null, auto(),
+                null, null, null, null, null, null, null, null, null,
+                false, false, false, true);
+        var result = products.preview(request, auth("ROLE_LEVEL2"));
+        assertEquals(14460L, line(result,"HANGER").partNo());
+        assertFalse(result.lines().stream().anyMatch(l -> l.role().equals("MIRROR")));
+        assertFalse(result.lines().stream().anyMatch(l -> l.role().equals("MIRROR_GLUE")));
     }
 
     @Test void unframedManualHangerDoesNotRequireBacking() throws Exception {
