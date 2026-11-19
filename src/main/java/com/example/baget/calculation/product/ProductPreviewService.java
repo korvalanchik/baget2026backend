@@ -38,6 +38,9 @@ public class ProductPreviewService {
             throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Перевірте параметри виробу");
         }
         validateSelection(request);
+        if (Boolean.TRUE.equals(request.includeMirrorGlue()) && !Boolean.TRUE.equals(request.mirrorProduct()))
+            throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_MIRROR_GLUE_SELECTION",
+                    "Термосклейку можна додати лише для виробу типу «Дзеркало»");
         SheetComposition.validate(request);
         if(Boolean.TRUE.equals(request.antiFrame()) && (request.productType()!=ProductPreviewRequest.ProductType.UNFRAMED_ARTWORK
                 || request.framePartNo()!=null || request.underframePartNo()!=null || SheetComposition.glass(request).isEmpty()
