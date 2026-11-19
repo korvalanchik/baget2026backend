@@ -35,7 +35,7 @@ public class SuspensionPreviewService {
         SuspensionRules.Plan plan;
         try {
             plan = rules.resolve(r.widthMm(), r.heightMm() == null ? r.widthMm() : r.heightMm(),
-                    r.backingPartNo() != null, r.mirrorPartNo() != null, r.hangerMode(), r.hangerPartNo(),
+                    r.backingPartNo() != null, r.mirrorPartNo() != null || Boolean.TRUE.equals(r.mirrorProduct()), r.hangerMode(), r.hangerPartNo(),
                     r.hangersPerProduct(), r.includePozzi(), r.pozziPerProduct());
             plan = rules.withCord(plan, r.includeCord());
         } catch (IllegalArgumentException ex) {
