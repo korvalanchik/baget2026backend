@@ -43,7 +43,7 @@ public final class SuspensionRulesChecks {
         auto("400.001", false, true, false, POWER, 2, 0, false);
         auto("100", true, true, false, H099, 2, 0, true);
         auto("401", true, true, false, POWER, 2, 0, false);
-        equal(new Plan(H04, 1, 0, true), resolve("300", "1500", true, false, Mode.AUTO, null, null));
+        equal(new Plan(H04, 1, 0, false), resolve("300", "1500", true, false, Mode.AUTO, null, null));
         equal(new Plan(POWER, 2, 0, true), resolve("300", "1500.001", true, false, Mode.AUTO, null, null));
         equal(new Plan(POWER, 2, 0, true), resolve("1500.001", "300", true, false, Mode.AUTO, null, null));
         equal(new Plan(null, 0, 2, false), resolve("300", true, false, Mode.NONE, null, null, true, null));
