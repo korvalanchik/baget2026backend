@@ -22,15 +22,7 @@ public record SuspensionPreviewRequest(
             Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct) {
         this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
                 hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, null, widthMm, false);
-        public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
-            Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
-            Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct,
-            Boolean includeCord, BigDecimal heightMm) {
-        this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode, hangerPartNo,
-                hangersPerProduct, includePozzi, pozziPerProduct, includeCord, heightMm, false);
     }
-
-}
 
     public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
             Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
@@ -38,5 +30,13 @@ public record SuspensionPreviewRequest(
             Boolean includeCord) {
         this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
                 hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, includeCord, widthMm, false);
+    }
+
+    public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
+            Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
+            Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct,
+            Boolean includeCord, BigDecimal heightMm) {
+        this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
+                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, includeCord, heightMm, false);
     }
 }
