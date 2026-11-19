@@ -187,8 +187,14 @@ class SheetCompositionTest {
     private static SuspensionSelection auto() { return new SuspensionSelection(SuspensionRules.Mode.AUTO,null,null,false,null); }
     private ProductPreviewRequest grouped(String width, String height, int quantity, List<SheetSelection> glass,
             List<SheetSelection> backings, List<SheetSelection> mats, MatMargins margins, SuspensionSelection suspension) {
+        return grouped(width, height, quantity, glass, backings, mats, margins, suspension, false);
+    }
+    private ProductPreviewRequest grouped(String width, String height, int quantity, List<SheetSelection> glass,
+            List<SheetSelection> backings, List<SheetSelection> mats, MatMargins margins, SuspensionSelection suspension,
+            boolean includeMirrorGlue) {
         return new ProductPreviewRequest(ProductPreviewRequest.ProductType.FRAMED_ARTWORK,n(width),n(height),quantity,
-                29340L,null,null,null,suspension,null,null,null,null,null,margins,glass,backings,mats);
+                29340L,null,null,null,null,suspension,null,null,null,null,null,margins,glass,backings,mats,
+                false,false,includeMirrorGlue);
     }
     private ProductPreviewRequest layeredArtwork(String bottom) {
         return grouped("400","600",2,List.of(sheet(12670,2),sheet(27510,1)),
@@ -225,7 +231,7 @@ class SheetCompositionTest {
         var margins = new MatMargins(n("50"),n("50"),n("10"),n("20"));
         var suspension = new SuspensionSelection(SuspensionRules.Mode.AUTO,null,5,false,null);
         var r = products.preview(grouped("300","500",3,List.of(sheet(12670,1),sheet(27760,2)),
-                List.of(sheet(27520,3)),List.of(sheet(5160,1)),margins,suspension),auth("ROLE_LEVEL2"));
+                List.of(sheet(27520,3)),List.of(sheet(5160,1)),margins,suspension,true),auth("ROLE_LEVEL2"));
         eq("1.272",line(r,"MIRROR").totalConsumption()); eq("5.58",line(r,"MIRROR_GLUE").totalConsumption());
         eq("15",line(r,"HANGER").totalConsumption()); assertEquals(14460L,line(r,"HANGER").partNo());
         eq("1.5",line(r,"CORD").totalConsumption());
@@ -235,10 +241,19 @@ class SheetCompositionTest {
         assertEquals(29650L,line(large,"HANGER").partNo());
         assertTrue(large.lines().stream().noneMatch(l -> l.role().equals("CORD")));
         var crocodile = new SuspensionSelection(SuspensionRules.Mode.MANUAL,14450L,null,false,null);
-        assertEquals("INVALID_SUSPENSION_SELECTION",assertThrows(PreviewException.class,() -> products.preview(
-                grouped("300","500",1,List.of(sheet(27760,1)),List.of(sheet(27520,1)),null,null,crocodile),
-                auth("ROLE_LEVEL2"))).getCode());
+        var manualMirror = products.preview(grouped("300","500",1,List.of(sheet(27760,1)),
+                List.of(sheet(27520,1)),null,null,crocodile),auth("ROLE_LEVEL2"));
+        assertEquals(14450L,line(manualMirror,"HANGER").partNo());
     }
+    @Test void eitherDimensionAbove1500SelectsPowerHangerAutomatically() {
+        var r = products.preview(grouped("300","1500.001",1,null,List.of(sheet(4460,1)),null,null,auto()),
+                auth("ROLE_LEVEL2"));
+        assertEquals(29650L,line(r,"HANGER").partNo());
+        var exact = products.preview(grouped("300","1500",1,null,List.of(sheet(4460,1)),null,null,auto()),
+                auth("ROLE_LEVEL2"));
+        assertEquals(14450L,line(exact,"HANGER").partNo());
+    }
+
     @Test void rawOuterWidthControlsSuspensionThresholdsAndCordLength() {
         var margins = new MatMargins(n("50"),n("50"),n("0"),n("0"));
         for (long backing : new long[]{4460,27520}) {
@@ -376,6 +391,24 @@ class SheetCompositionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].product.lines[?(@.role == 'CORD')]").isEmpty());
     }
+    @Test void customerSuppliedMirrorAddsGlueOnlyWhenExplicitlySelected() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var without = mapper.readValue("""
+            {"productType":"FRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
+             "framePartNo":29340}
+            """, ProductPreviewRequest.class);
+        var plain = products.preview(without, auth("ROLE_LEVEL2"));
+        assertFalse(plain.lines().stream().anyMatch(l -> l.role().equals("MIRROR_GLUE")));
+        verify(repository, never()).findById(28540L);
+        var with = mapper.readValue("""
+            {"productType":"FRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
+             "framePartNo":29340,"includeMirrorGlue":true}
+            """, ProductPreviewRequest.class);
+        var glued = products.preview(with, auth("ROLE_LEVEL2"));
+        eq("1.4", line(glued,"MIRROR_GLUE").totalConsumption());
+        assertFalse(glued.lines().stream().anyMatch(l -> l.calculation().partNo() == 27760L));
+    }
+
     @Test void unframedSheetsHaveNoFrameOrAutomaticAccessories() throws Exception {
         var request = new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
             {"productType":"UNFRAMED_ARTWORK","widthMm":300,"heightMm":400,"productQuantity":1,
@@ -455,7 +488,9 @@ class SheetCompositionTest {
         var noCord=products.preview(mapper.readValue(json.replace("\"includeCord\":true","\"includeCord\":false"),ProductPreviewRequest.class),auth("ROLE_LEVEL2"));
         assertFalse(noCord.lines().stream().anyMatch(l->l.role().equals("CORD")));
         var crocodile=mapper.readValue(json.replace("\"hangerMode\":\"AUTO\"","\"hangerMode\":\"MANUAL\",\"hangerPartNo\":14450"),ProductPreviewRequest.class);
-        assertEquals("INVALID_SUSPENSION_SELECTION",assertThrows(PreviewException.class,()->products.preview(crocodile,auth("ROLE_LEVEL2"))).getCode());
+        var manualCrocodile=products.preview(mapper.readValue(json.replace("\\\"includeCord\\\":true","\\\"includeCord\\\":false")
+                .replace("\\\"hangerMode\\\":\\\"AUTO\\\"","\\\"hangerMode\\\":\\\"MANUAL\\\",\\\"hangerPartNo\\\":14450"),ProductPreviewRequest.class),auth("ROLE_LEVEL2"));
+        assertEquals(14450L,line(manualCrocodile,"HANGER").partNo());
     }
     @Test void antiframeRejectsPvcWithoutDvp() throws Exception {
         var request=new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
