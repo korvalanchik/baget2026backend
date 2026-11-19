@@ -34,7 +34,7 @@ public class MirrorAccessoriesComposer {
             var result = suspensions.preview(new SuspensionPreviewRequest(SheetComposition.width(r), r.productQuantity(),
                     SheetComposition.rigidBackingPartNo(r), SheetComposition.mirrorPartNo(r), choice.hangerMode(), choice.hangerPartNo(),
                     choice.hangersPerProduct(), choice.includePozzi(), choice.pozziPerProduct(), choice.includeCord(),
-                    SheetComposition.height(r)), auth);
+                    SheetComposition.height(r), Boolean.TRUE.equals(r.mirrorProduct())), auth);
             lines.addAll(result.lines());
         }
         return List.copyOf(lines);
