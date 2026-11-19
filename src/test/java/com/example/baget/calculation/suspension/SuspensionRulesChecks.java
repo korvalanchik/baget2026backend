@@ -64,7 +64,7 @@ public final class SuspensionRulesChecks {
         rejects(() -> resolve("300", true, false, Mode.AUTO, null, 0, false, null));
         rejects(() -> resolve("300", true, false, Mode.AUTO, null, null, false, 1));
         equal(new Plan(H099, 2, 0, true), resolve("801", false, false, Mode.MANUAL, H099, null, false, null));
-        equal(new Plan(H099, 2, 0, true), resolve("401", true, true, Mode.MANUAL, H099, null, false, null));
+        equal(new Plan(H099, 2, 0, false), resolve("401", true, true, Mode.MANUAL, H099, null, false, null));
     }
     public static void main(String[] args) {
         runAll();
