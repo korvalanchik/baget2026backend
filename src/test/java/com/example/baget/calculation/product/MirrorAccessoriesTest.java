@@ -57,6 +57,7 @@ class MirrorAccessoriesTest {
         part(27760, CalculationMethod.AREA, UnitType.SQUARE_METER, Map.of(), 1297.5, 150);
         part(28540, CalculationMethod.PERIMETER, UnitType.METER, Map.of(), 20, 10);
         part(4460, CalculationMethod.AREA, UnitType.SQUARE_METER, Map.of(), 201.2, 85);
+        part(14450, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 6.2, .51);
         part(14460, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 3.8, .27);
         part(29650, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 16.2, 7);
         part(23080, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 20, .7);
