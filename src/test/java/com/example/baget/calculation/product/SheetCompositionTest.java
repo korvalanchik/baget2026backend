@@ -244,6 +244,7 @@ class SheetCompositionTest {
         var manualMirror = products.preview(grouped("300","500",1,List.of(sheet(27760,1)),
                 List.of(sheet(27520,1)),null,null,crocodile),auth("ROLE_LEVEL2"));
         assertEquals(14450L,line(manualMirror,"HANGER").partNo());
+        assertFalse(manualMirror.lines().stream().anyMatch(l -> l.role().equals("MIRROR_GLUE")));
     }
     @Test void eitherDimensionAbove1500SelectsPowerHangerAutomatically() {
         var r = products.preview(grouped("300","1500.001",1,null,List.of(sheet(4460,1)),null,null,auto()),
