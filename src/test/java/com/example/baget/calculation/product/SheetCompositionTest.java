@@ -428,6 +428,7 @@ class SheetCompositionTest {
             """, ProductPreviewRequest.class);
         var result = products.preview(request, auth("ROLE_LEVEL2"));
         assertEquals(29650L, line(result,"HANGER").partNo());
+        assertFalse(result.lines().stream().anyMatch(l -> l.role().equals("CORD")));
     }
 
     @Test void unframedSheetsHaveNoFrameOrAutomaticAccessories() throws Exception {
