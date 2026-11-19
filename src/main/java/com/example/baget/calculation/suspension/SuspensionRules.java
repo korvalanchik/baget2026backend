@@ -14,8 +14,14 @@ public final class SuspensionRules {
 
     public Plan resolve(BigDecimal widthMm, boolean hasRigidBacking, boolean hasMirror, Mode mode,
                         Long selectedPartNo, Integer hangerQuantity, boolean includePozzi, Integer pozziQuantity) {
-        if (widthMm == null || widthMm.signum() <= 0 || mode == null)
-            throw new IllegalArgumentException("Потрібні додатна ширина та режим підвісу");
+        return resolve(widthMm, widthMm, hasRigidBacking, hasMirror, mode, selectedPartNo,
+                hangerQuantity, includePozzi, pozziQuantity);
+    }
+
+    public Plan resolve(BigDecimal widthMm, BigDecimal heightMm, boolean hasRigidBacking, boolean hasMirror, Mode mode,
+                        Long selectedPartNo, Integer hangerQuantity, boolean includePozzi, Integer pozziQuantity) {
+        if (widthMm == null || widthMm.signum() <= 0 || heightMm == null || heightMm.signum() <= 0 || mode == null)
+            throw new IllegalArgumentException("Потрібні додатні розміри та режим підвісу");
         quantity(hangerQuantity); quantity(pozziQuantity);
         if (mode != Mode.MANUAL && selectedPartNo != null)
             throw new IllegalArgumentException("hangerPartNo дозволено лише в MANUAL");
@@ -24,7 +30,8 @@ public final class SuspensionRules {
         if (!includePozzi && pozziQuantity != null)
             throw new IllegalArgumentException("Кількість лапок задана без увімкнення лапок");
 
-        long automatic = hasMirror ? (gt(widthMm, 400) ? POWER : H099)
+        long automatic = gt(widthMm, 1500) || gt(heightMm, 1500) ? POWER
+                : hasMirror ? (gt(widthMm, 400) ? POWER : H099)
                 : !hasRigidBacking ? (gt(widthMm, 800) ? POWER : H099)
                 : widthMm.compareTo(BigDecimal.valueOf(150)) < 0 ? H01 : H04;
         Long hanger = switch (mode) {
@@ -37,12 +44,7 @@ public final class SuspensionRules {
                 yield selectedPartNo;
             }
         };
-        if (hanger != null) {
-            if (crocodile(hanger) && (hasMirror || !hasRigidBacking))
-                throw new IllegalArgumentException("Крокодили дозволені лише з ДВП/ПВХ і без дзеркала");
-            if ((hasMirror || !hasRigidBacking) && hanger != automatic)
-                throw new IllegalArgumentException("Для дзеркала або виробу без ДВП/ПВХ дотримуйтеся порога 400/800 мм");
-        }
+        // MANUAL is an explicit manager decision: do not apply material/size compatibility rules.
         int count = hanger == null ? 0 : hangerQuantity != null ? hangerQuantity
                 : hanger == H01 ? 1 : hanger == H04 ? (gt(widthMm, 450) ? 2 : 1) : 2;
         if (includePozzi && (!hasRigidBacking || (hanger != null && !crocodile(hanger))))
