@@ -24,7 +24,7 @@ public record ProductPreviewRequest(
         @Size(max=50) List<@NotNull @Valid SheetSelection> glass,
         @Size(max=50) List<@NotNull @Valid SheetSelection> backings,
         @Size(max=50) List<@NotNull @Valid SheetSelection> mats,
-        Boolean antiFrame, Boolean includeUnderframeFasteners
+        Boolean antiFrame, Boolean includeUnderframeFasteners, Boolean includeMirrorGlue
 ) {
     public enum ProductType { MIRROR_IN_FRAME, UNDERFRAME, FRAMED_ARTWORK, UNFRAMED_ARTWORK }
 
@@ -32,7 +32,17 @@ public record ProductPreviewRequest(
             Long frame, Long mirror, Long underframe, Long backing, SuspensionSelection suspension,
             Long glass, Integer glassLayers, Integer backingLayers, Long mat, Integer matLayers,
             MatMargins margins, List<SheetSelection> glasses, List<SheetSelection> backings, List<SheetSelection> mats) {
-        this(type,width,height,quantity,frame,mirror,underframe,backing,suspension,glass,glassLayers,backingLayers,mat,matLayers,margins,glasses,backings,mats,false,false);
+        this(type,width,height,quantity,frame,mirror,underframe,backing,suspension,glass,glassLayers,backingLayers,mat,matLayers,margins,glasses,backings,mats,false,false,false);
+    }
+
+    public ProductPreviewRequest(ProductType type, BigDecimal width, BigDecimal height, Integer quantity,
+            Long frame, Long mirror, Long underframe, Long backing, SuspensionSelection suspension,
+            Long glass, Integer glassLayers, Integer backingLayers, Long mat, Integer matLayers,
+            MatMargins margins, List<SheetSelection> glasses, List<SheetSelection> backings,
+            List<SheetSelection> mats, Boolean antiFrame, Boolean includeUnderframeFasteners) {
+        this(type, width, height, quantity, frame, mirror, underframe, backing, suspension, glass,
+                glassLayers, backingLayers, mat, matLayers, margins, glasses, backings, mats,
+                antiFrame, includeUnderframeFasteners, false);
     }
 
     // Compatibility with the first step-11 draft; prefer material lists for new clients.
