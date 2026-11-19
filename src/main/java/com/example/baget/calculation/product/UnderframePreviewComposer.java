@@ -50,7 +50,7 @@ public class UnderframePreviewComposer {
         if(request.suspension()!=null){
             var choice=request.suspension();
             if(Boolean.TRUE.equals(choice.includePozzi()))throw error("INVALID_UNDERFRAME_HANGER","Лапки не використовуються з підрамником");
-            var result=suspensions.preview(new com.example.baget.calculation.suspension.SuspensionPreviewRequest(request.widthMm(),request.productQuantity(),null,null,choice.hangerMode(),choice.hangerPartNo(),choice.hangersPerProduct(),false,choice.pozziPerProduct(),choice.includeCord()),auth);
+            var result=suspensions.preview(new com.example.baget.calculation.suspension.SuspensionPreviewRequest(request.widthMm(),request.productQuantity(),null,null,choice.hangerMode(),choice.hangerPartNo(),choice.hangersPerProduct(),false,choice.pozziPerProduct(),choice.includeCord(),request.heightMm()),auth);
             lines.addAll(result.lines());
         }
         // A small underframe neither needs a rail price nor includes a zero-value line.
