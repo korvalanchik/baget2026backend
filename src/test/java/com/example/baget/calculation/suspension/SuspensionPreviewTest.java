@@ -128,6 +128,15 @@ class SuspensionPreviewTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.selection.hangerPartNo").value(27580))
                 .andExpect(jsonPath("$.total").value(2.5));
     }
+    @Test void httpUsesEitherDimensionForThe1500MmPowerThreshold() throws Exception {
+        mvc.perform(post("/api/calculations/suspension-preview").principal(auth("ROLE_LEVEL2"))
+                .contentType("application/json").content("""
+                {"widthMm":300,"heightMm":1500.001,"productQuantity":1,"backingPartNo":4460,
+                 "hangerMode":"AUTO","includePozzi":false}
+                """))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.selection.hangerPartNo").value(29650));
+    }
+
     @Test void httpRejectsZeroQuantityAndUnknownMode() throws Exception {
         mvc.perform(post("/api/calculations/suspension-preview").principal(auth("ROLE_LEVEL2"))
                 .contentType("application/json").content("""
