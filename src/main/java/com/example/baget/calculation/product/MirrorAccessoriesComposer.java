@@ -30,14 +30,11 @@ public class MirrorAccessoriesComposer {
         }
         if (r.suspension() != null) {
             var choice = r.suspension();
-            if(r.productType()==ProductPreviewRequest.ProductType.UNFRAMED_ARTWORK && choice.hangerMode()==SuspensionRules.Mode.AUTO)
-                choice=new SuspensionSelection(SuspensionRules.Mode.MANUAL,
-                    SheetComposition.width(r).compareTo(java.math.BigDecimal.valueOf(150))<0?SuspensionRules.H01:SuspensionRules.H04,
-                    choice.hangersPerProduct(),false,null,false);
-            // Never accept another width, quantity or hasMirror/hasDvp from nested suspension JSON.
+            // Geometry and material context always come from the enclosing product.
             var result = suspensions.preview(new SuspensionPreviewRequest(SheetComposition.width(r), r.productQuantity(),
                     SheetComposition.rigidBackingPartNo(r), SheetComposition.mirrorPartNo(r), choice.hangerMode(), choice.hangerPartNo(),
-                    choice.hangersPerProduct(), choice.includePozzi(), choice.pozziPerProduct(), choice.includeCord()), auth);
+                    choice.hangersPerProduct(), choice.includePozzi(), choice.pozziPerProduct(), choice.includeCord(),
+                    SheetComposition.height(r)), auth);
             lines.addAll(result.lines());
         }
         return List.copyOf(lines);
