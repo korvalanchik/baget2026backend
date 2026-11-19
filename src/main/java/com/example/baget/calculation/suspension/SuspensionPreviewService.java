@@ -34,8 +34,9 @@ public class SuspensionPreviewService {
             throw bad("UNSUPPORTED_SUSPENSION_CONTEXT", "Підтримуються ДВП 4460, ПВХ 27520 та дзеркало 27760");
         SuspensionRules.Plan plan;
         try {
-            plan = rules.resolve(r.widthMm(), r.backingPartNo() != null, r.mirrorPartNo() != null,
-                    r.hangerMode(), r.hangerPartNo(), r.hangersPerProduct(), r.includePozzi(), r.pozziPerProduct());
+            plan = rules.resolve(r.widthMm(), r.heightMm() == null ? r.widthMm() : r.heightMm(),
+                    r.backingPartNo() != null, r.mirrorPartNo() != null, r.hangerMode(), r.hangerPartNo(),
+                    r.hangersPerProduct(), r.includePozzi(), r.pozziPerProduct());
             plan = rules.withCord(plan, r.includeCord());
         } catch (IllegalArgumentException ex) {
             throw bad("INVALID_SUSPENSION_SELECTION", ex.getMessage());
