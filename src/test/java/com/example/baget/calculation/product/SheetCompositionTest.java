@@ -193,7 +193,7 @@ class SheetCompositionTest {
             List<SheetSelection> backings, List<SheetSelection> mats, MatMargins margins, SuspensionSelection suspension,
             boolean includeMirrorGlue) {
         return new ProductPreviewRequest(ProductPreviewRequest.ProductType.FRAMED_ARTWORK,n(width),n(height),quantity,
-                29340L,null,null,null,null,suspension,null,null,null,null,null,margins,glass,backings,mats,
+                29340L,null,null,null,suspension,null,null,null,null,null,margins,glass,backings,mats,
                 false,false,includeMirrorGlue,includeMirrorGlue);
     }
     private ProductPreviewRequest layeredArtwork(String bottom) {
