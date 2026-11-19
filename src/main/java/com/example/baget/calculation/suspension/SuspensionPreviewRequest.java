@@ -14,20 +14,29 @@ public record SuspensionPreviewRequest(
         @NotNull Boolean includePozzi,
         @Min(1) @Max(10000) Integer pozziPerProduct,
         Boolean includeCord,
-        @Positive @DecimalMax("100000") @Digits(integer=6, fraction=3) BigDecimal heightMm
+        @Positive @DecimalMax("100000") @Digits(integer=6, fraction=3) BigDecimal heightMm,
+        Boolean mirrorProduct
 ) {
     public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
             Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
             Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct) {
         this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
-                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, null, widthMm);
+                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, null, widthMm, false);
+        public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
+            Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
+            Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct,
+            Boolean includeCord, BigDecimal heightMm) {
+        this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode, hangerPartNo,
+                hangersPerProduct, includePozzi, pozziPerProduct, includeCord, heightMm, false);
     }
+
+}
 
     public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
             Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
             Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct,
             Boolean includeCord) {
         this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
-                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, includeCord, widthMm);
+                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, includeCord, widthMm, false);
     }
 }
