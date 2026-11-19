@@ -11,6 +11,9 @@ public final class SuspensionRulesChecks {
                                 Integer count, boolean pozzi, Integer pozziCount) {
         return RULES.resolve(new BigDecimal(w), dvp, mirror, mode, id, count, pozzi, pozziCount);
     }
+    private static Plan resolve(String w, String h, boolean dvp, boolean mirror, Mode mode, Long id, Integer count) {
+        return RULES.resolve(new BigDecimal(w), new BigDecimal(h), dvp, mirror, mode, id, count, false, null);
+    }
     private static void auto(String w, boolean dvp, boolean mirror, boolean pozzi,
                              long id, int count, int feet, boolean cord) {
         var actual = resolve(w, dvp, mirror, Mode.AUTO, null, null, pozzi, null);
@@ -40,14 +43,17 @@ public final class SuspensionRulesChecks {
         auto("400.001", false, true, false, POWER, 2, 0, false);
         auto("100", true, true, false, H099, 2, 0, true);
         auto("401", true, true, false, POWER, 2, 0, false);
+        equal(new Plan(H04, 1, 0, false), resolve("300", "1500", true, false, Mode.AUTO, null, null));
+        equal(new Plan(POWER, 2, 0, true), resolve("300", "1500.001", true, false, Mode.AUTO, null, null));
+        equal(new Plan(POWER, 2, 0, true), resolve("1500.001", "300", true, false, Mode.AUTO, null, null));
         equal(new Plan(null, 0, 2, false), resolve("300", true, false, Mode.NONE, null, null, true, null));
         equal(new Plan(null, 0, 0, false), resolve("300", false, false, Mode.NONE, null, null, false, null));
         equal(new Plan(H099, 1, 0, true), resolve("300", true, false, Mode.MANUAL, H099, 1, false, null));
         equal(new Plan(POWER, 1, 0, true), resolve("300", true, false, Mode.MANUAL, POWER, 1, false, null));
         equal(new Plan(H04, 4, 3, false), resolve("300", true, false, Mode.AUTO, null, 4, true, 3));
         equal(new Plan(H099, 1, 0, true), resolve("200", false, true, Mode.AUTO, null, 1, false, null));
-        rejects(() -> resolve("200", false, false, Mode.MANUAL, H01, null, false, null));
-        rejects(() -> resolve("200", true, true, Mode.MANUAL, H04, null, false, null));
+        equal(new Plan(H01, 1, 0, false), resolve("200", false, false, Mode.MANUAL, H01, null, false, null));
+        equal(new Plan(H04, 1, 0, false), resolve("200", true, true, Mode.MANUAL, H04, null, false, null));
         rejects(() -> resolve("300", true, false, Mode.MANUAL, H099, null, true, null));
         rejects(() -> resolve("300", true, false, Mode.MANUAL, POWER, null, true, null));
         rejects(() -> resolve("300", false, false, Mode.NONE, null, null, true, null));
@@ -57,11 +63,11 @@ public final class SuspensionRulesChecks {
         rejects(() -> resolve("300", true, false, Mode.NONE, null, 2, true, null));
         rejects(() -> resolve("300", true, false, Mode.AUTO, null, 0, false, null));
         rejects(() -> resolve("300", true, false, Mode.AUTO, null, null, false, 1));
-        rejects(() -> resolve("801", false, false, Mode.MANUAL, H099, null, false, null));
-        rejects(() -> resolve("401", true, true, Mode.MANUAL, H099, null, false, null));
+        equal(new Plan(H099, 2, 0, true), resolve("801", false, false, Mode.MANUAL, H099, null, false, null));
+        equal(new Plan(H099, 2, 0, false), resolve("401", true, true, Mode.MANUAL, H099, null, false, null));
     }
     public static void main(String[] args) {
         runAll();
-        System.out.println("35 suspension rule checks passed");
+        System.out.println("38 suspension rule checks passed");
     }
 }

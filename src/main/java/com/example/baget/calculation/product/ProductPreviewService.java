@@ -38,6 +38,9 @@ public class ProductPreviewService {
             throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Перевірте параметри виробу");
         }
         validateSelection(request);
+        if (Boolean.TRUE.equals(request.includeMirrorGlue()) && !Boolean.TRUE.equals(request.mirrorProduct()))
+            throw new PreviewException(HttpStatus.BAD_REQUEST, "INVALID_MIRROR_GLUE_SELECTION",
+                    "Термосклейку можна додати лише для виробу типу «Дзеркало»");
         SheetComposition.validate(request);
         if(Boolean.TRUE.equals(request.antiFrame()) && (request.productType()!=ProductPreviewRequest.ProductType.UNFRAMED_ARTWORK
                 || request.framePartNo()!=null || request.underframePartNo()!=null || SheetComposition.glass(request).isEmpty()
@@ -57,13 +60,11 @@ public class ProductPreviewService {
             return summarize(request, lines);
         }
         if (request.productType() == ProductPreviewRequest.ProductType.UNFRAMED_ARTWORK) {
-            var lines=new ArrayList<>(SheetComposition.composeUnframed(request, parts, materials, auth));
+            var lines=new ArrayList<>(SheetComposition.composeUnframed(request, parts, materials, rule, auth));
             if(request.suspension()!=null) {
                 var choice=request.suspension();
-                if(SheetComposition.backings(request).isEmpty() || choice.includePozzi() || Boolean.TRUE.equals(choice.includeCord())
-                    || (choice.hangerMode()==com.example.baget.calculation.suspension.SuspensionRules.Mode.MANUAL
-                        && (choice.hangerPartNo()==null || !java.util.Set.of(27580L,14450L).contains(choice.hangerPartNo()))))
-                    throw new PreviewException(HttpStatus.BAD_REQUEST,"INVALID_UNFRAMED_HANGER","Без рами дозволений крокодил на заднику, без шнурка й лапок");
+                if(choice.includePozzi() || Boolean.TRUE.equals(choice.includeCord()))
+                    throw new PreviewException(HttpStatus.BAD_REQUEST,"INVALID_UNFRAMED_HANGER","Для виробу без рами лапки та шнурок не додаються");
                 // Sheets already include the backing; only append the hanger from accessories.
                 accessories.compose(request,auth).stream().filter(l->!l.role().equals("BACKING")).forEach(lines::add);
             }
@@ -107,7 +108,8 @@ public class ProductPreviewService {
             case FRAMED_ARTWORK -> r.framePartNo() != null && r.mirrorPartNo() == null && (r.underframePartNo() == null || Boolean.TRUE.equals(r.includeUnderframeFasteners()));
             case UNFRAMED_ARTWORK -> r.framePartNo() == null && r.mirrorPartNo() == null
                     && r.underframePartNo() == null
-                    && (!SheetComposition.glass(r).isEmpty() || !SheetComposition.backings(r).isEmpty() || !SheetComposition.mats(r).isEmpty());
+                    && (!SheetComposition.glass(r).isEmpty() || !SheetComposition.backings(r).isEmpty()
+                        || !SheetComposition.mats(r).isEmpty() || Boolean.TRUE.equals(r.includeMirrorGlue()));
             case UNDERFRAME -> r.underframePartNo() != null && r.framePartNo() == null && r.mirrorPartNo() == null
                     && r.backingPartNo() == null && r.backingLayers() == null
                     && r.glassPartNo() == null && r.glassLayers() == null && r.matPartNo() == null

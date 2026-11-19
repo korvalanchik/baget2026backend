@@ -63,6 +63,8 @@
         "heightMm": 500,
         "productQuantity": 3,
         "framePartNo": 29340,
+        "mirrorProduct": true,
+        "includeMirrorGlue": true,
         "glass": [
           {
             "partNo": 12670,

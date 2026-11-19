@@ -57,6 +57,7 @@ class MirrorAccessoriesTest {
         part(27760, CalculationMethod.AREA, UnitType.SQUARE_METER, Map.of(), 1297.5, 150);
         part(28540, CalculationMethod.PERIMETER, UnitType.METER, Map.of(), 20, 10);
         part(4460, CalculationMethod.AREA, UnitType.SQUARE_METER, Map.of(), 201.2, 85);
+        part(14450, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 6.2, .51);
         part(14460, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 3.8, .27);
         part(29650, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 16.2, 7);
         part(23080, CalculationMethod.QUANTITY, UnitType.PIECE, Map.of(), 20, .7);
@@ -119,10 +120,11 @@ class MirrorAccessoriesTest {
         var r = service.preview(request("400", "600", 1, null, auto()), auth("ROLE_LEVEL2"));
         eq(".01", r.total()); eq("0", r.linesSubtotal()); eq(".01", r.roundingAdjustment());
     }
-    @Test void crocodilesAreRejectedBecauseMirrorContextCannotBeOverridden() {
+    @Test void manualCrocodileCanOverrideMirrorCompatibilityRecommendation() {
         var choice = new SuspensionSelection(SuspensionRules.Mode.MANUAL, 14450L, 1, false, null);
-        assertEquals("INVALID_SUSPENSION_SELECTION", assertThrows(PreviewException.class,
-                () -> service.preview(request("150", "200", 1, 4460L, choice), auth("ROLE_LEVEL2"))).getCode());
+        var result = service.preview(request("150", "200", 1, 4460L, choice), auth("ROLE_LEVEL2"));
+        assertEquals(14450L, result.lines().stream().filter(l -> l.role().equals("HANGER"))
+                .findFirst().orElseThrow().calculation().partNo());
     }
     @Test void badBackingMissingPartOrWrongMetadataAreRejected() {
         assertEquals("UNSUPPORTED_BACKING_PART", assertThrows(PreviewException.class,

@@ -11,5 +11,7 @@
   "backings": [{ "partNo": 27520, "quantityPerProduct": 3 }],
   "mats": [{ "partNo": 5160, "quantityPerProduct": 1 }],
   "matMargins": { "leftMm": 50, "rightMm": 50, "topMm": 10, "bottomMm": 20 },
+  "mirrorProduct": true,
+  "includeMirrorGlue": true,
   "suspension": { "hangerMode": "AUTO", "hangersPerProduct": 5, "includePozzi": false }
 }

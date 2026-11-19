@@ -13,12 +13,30 @@ public record SuspensionPreviewRequest(
         @Min(1) @Max(10000) Integer hangersPerProduct,
         @NotNull Boolean includePozzi,
         @Min(1) @Max(10000) Integer pozziPerProduct,
-        Boolean includeCord
+        Boolean includeCord,
+        @Positive @DecimalMax("100000") @Digits(integer=6, fraction=3) BigDecimal heightMm,
+        Boolean mirrorProduct
 ) {
     public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
             Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
             Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct) {
         this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
-                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, null);
+                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, null, widthMm, false);
+    }
+
+    public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
+            Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
+            Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct,
+            Boolean includeCord) {
+        this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
+                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, includeCord, widthMm, false);
+    }
+
+    public SuspensionPreviewRequest(BigDecimal widthMm, Integer productQuantity,
+            Long backingPartNo, Long mirrorPartNo, SuspensionRules.Mode hangerMode,
+            Long hangerPartNo, Integer hangersPerProduct, Boolean includePozzi, Integer pozziPerProduct,
+            Boolean includeCord, BigDecimal heightMm) {
+        this(widthMm, productQuantity, backingPartNo, mirrorPartNo, hangerMode,
+                hangerPartNo, hangersPerProduct, includePozzi, pozziPerProduct, includeCord, heightMm, false);
     }
 }
