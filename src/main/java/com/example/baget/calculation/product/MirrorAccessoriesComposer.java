@@ -30,6 +30,11 @@ public class MirrorAccessoriesComposer {
         }
         if (r.suspension() != null) {
             var choice = r.suspension();
+            if (r.productType() == ProductPreviewRequest.ProductType.UNFRAMED_ARTWORK
+                    && choice.includeCord() == null) {
+                choice = new SuspensionSelection(choice.hangerMode(), choice.hangerPartNo(),
+                        choice.hangersPerProduct(), false, null, false);
+            }
             // Geometry and material context always come from the enclosing product.
             var result = suspensions.preview(new SuspensionPreviewRequest(SheetComposition.width(r), r.productQuantity(),
                     SheetComposition.rigidBackingPartNo(r), SheetComposition.mirrorPartNo(r), choice.hangerMode(), choice.hangerPartNo(),
