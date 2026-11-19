@@ -90,17 +90,8 @@ public final class SheetComposition {
         for (var selection : glass(r))
             lines.add(sheet(selection.partNo() == SuspensionRules.MIRROR ? "MIRROR" : "GLASS",
                     selection.partNo(), selection.quantityPerProduct(), r, parts, materials, auth));
-        if (mirrorPartNo(r) != null) {
-            var glue = mirrorRule.glueComponent();
-            var part = load(parts, glue.partNo());
-            if (part.getPartKind() != PartKind.MATERIAL || part.getCalculationMethod() != CalculationMethod.PERIMETER
-                    || part.getUnitType() != UnitType.METER || part.getCalculationParams() == null
-                    || !part.getCalculationParams().isEmpty())
-                throw settings("MIRROR_GLUE");
-            // One perimeter per product, independent of mirror layers and other glass selections.
-            lines.add(new ProductPreviewResponse.Line(glue.role(), glue.source(), materials.preview(
-                    new MaterialPreviewRequest(glue.partNo(), width(r), height(r), r.productQuantity(), 1), auth)));
-        }
+        if (Boolean.TRUE.equals(r.includeMirrorGlue()))
+            lines.add(mirrorGlue(r, parts, materials, mirrorRule, auth));
         for (var selection : mats(r))
             lines.add(sheet("MAT", selection.partNo(), selection.quantityPerProduct(), r, parts, materials, auth));
         return lines;
@@ -108,13 +99,27 @@ public final class SheetComposition {
 
     /** Standalone sheets: no frame, frame glue, hangers, cord or pozzi are inferred. */
     public static List<ProductPreviewResponse.Line> composeUnframed(ProductPreviewRequest r,
-            PartsRepository parts, MaterialPreviewService materials, Authentication auth) {
+            PartsRepository parts, MaterialPreviewService materials, MirrorFrameRule mirrorRule, Authentication auth) {
         var lines = new ArrayList<ProductPreviewResponse.Line>();
         for (var s : glass(r)) lines.add(sheet(s.partNo() == SuspensionRules.MIRROR ? "MIRROR" : "GLASS",
                 s.partNo(), s.quantityPerProduct(), r, parts, materials, auth));
         for (var s : backings(r)) lines.add(sheet("BACKING", s.partNo(), s.quantityPerProduct(), r, parts, materials, auth));
         for (var s : mats(r)) lines.add(sheet("MAT", s.partNo(), s.quantityPerProduct(), r, parts, materials, auth));
+        if (Boolean.TRUE.equals(r.includeMirrorGlue()))
+            lines.add(mirrorGlue(r, parts, materials, mirrorRule, auth));
         return List.copyOf(lines);
+    }
+
+    private static ProductPreviewResponse.Line mirrorGlue(ProductPreviewRequest r, PartsRepository parts,
+            MaterialPreviewService materials, MirrorFrameRule mirrorRule, Authentication auth) {
+        var glue = mirrorRule.glueComponent();
+        var part = load(parts, glue.partNo());
+        if (part.getPartKind() != PartKind.MATERIAL || part.getCalculationMethod() != CalculationMethod.PERIMETER
+                || part.getUnitType() != UnitType.METER || part.getCalculationParams() == null
+                || !part.getCalculationParams().isEmpty())
+            throw settings("MIRROR_GLUE");
+        return new ProductPreviewResponse.Line(glue.role(), glue.source(), materials.preview(
+                new MaterialPreviewRequest(glue.partNo(), width(r), height(r), r.productQuantity(), 1), auth));
     }
 
     public static void addFasteners(ProductPreviewRequest r, List<ProductPreviewResponse.Line> lines,
