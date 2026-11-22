@@ -93,7 +93,7 @@ public class ProductInvoicePdf {
         BigDecimal debt = (BigDecimal) invoice.get("debt");
         Paragraph balance = new Paragraph(
                 "Залишок до оплати на момент друку: " +
-                        (debt == null ? BigDecimal.ZERO : debt).max(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)) + " грн",
+                        (debt == null ? BigDecimal.ZERO : debt).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP) + " грн",
                 bold);
         balance.setAlignment(Element.ALIGN_RIGHT);
         balance.setSpacingBefore(3);
