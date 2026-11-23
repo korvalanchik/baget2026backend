@@ -37,9 +37,11 @@ public class ProductInvoicePdf {
         var base = BaseFont.createFont(
                 Objects.requireNonNull(getClass().getResource("/fonts/DejaVu_Sans.ttf")).toString(),
                 BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-        var font = new Font(base, 9);
-        var bold = new Font(base, 10, Font.BOLD);
+        var font = new Font(base, 10);
+        var bold = new Font(base, 11, Font.BOLD);
         var section = new Font(base, 10, Font.BOLD);
+        var detailFont = new Font(base, 8);
+        var detailBold = new Font(base, 8, Font.BOLD);
         var supplier = company.get();
 
         doc.add(new Paragraph("Постачальник: " + supplier.getFullName(), bold));
@@ -82,7 +84,7 @@ public class ProductInvoicePdf {
             table.addCell(cell(line.get("orderNo").toString(), font, Element.ALIGN_CENTER));
             table.addCell(cell(label, font, Element.ALIGN_LEFT));
             table.addCell(cell(amountText(line.get("originalAmount")), font, Element.ALIGN_RIGHT));
-            table.addCell(cell(money(line.get("amount")), font, Element.ALIGN_RIGHT));
+            table.addCell(cell(amountText(line.get("amount")), font, Element.ALIGN_RIGHT));
         }
         doc.add(table);
 
@@ -98,7 +100,10 @@ public class ProductInvoicePdf {
 
                 BigDecimal confirmedTotal = decimal(snapshot.path("total"));
                 if (snapshot.hasNonNull("retailTotal")) confirmedTotal = decimal(snapshot.path("retailTotal"));
-                String confirmedLabel = snapshot.hasNonNull("retailTotal")\n                        ? "Підтверджена роздрібна вартість виробу: "\n                        : "Підтверджена вартість виробу: ";\n                doc.add(new Paragraph(confirmedLabel + money(confirmedTotal) + " грн", bold));
+                String confirmedLabel = snapshot.hasNonNull("retailTotal")
+                        ? "Підтверджена роздрібна вартість виробу: "
+                        : "Підтверджена вартість виробу: ";
+                doc.add(new Paragraph(confirmedLabel + money(confirmedTotal) + " грн", bold));
 
                 JsonNode lines = snapshot.path("lines");
                 if (lines.isArray() && !lines.isEmpty()) {
@@ -107,7 +112,7 @@ public class ProductInvoicePdf {
                     composition.setSpacingBefore(5);
                     composition.setHeaderRows(1);
                     for (String header : new String[]{"Матеріал / робота", "Од.", "Кількість", "Ціна за од.", "Сума"}) {
-                        composition.addCell(headerCell(header, bold));
+                        composition.addCell(headerCell(header, detailBold));
                     }
                     Map<Long, JsonNode> resellerLines = resellerLines(snapshot.path("resellerLines"));
                     for (JsonNode component : lines) {
@@ -122,7 +127,7 @@ public class ProductInvoicePdf {
                         String role = component.path("role").asText("");
                         String kind = component.path("material").asBoolean(false) ? "Матеріал" : "Робота";
                         composition.addCell(cell(description + "\n" + kind + (role.isBlank() ? "" : " · " + role),
-                                font, Element.ALIGN_LEFT));
+                                detailFont, Element.ALIGN_LEFT));
                         composition.addCell(cell(component.path("unit").asText("—"), detailFont, Element.ALIGN_CENTER));
                         composition.addCell(cell(number(quantity), detailFont, Element.ALIGN_RIGHT));
                         composition.addCell(cell(money(unitPrice), detailFont, Element.ALIGN_RIGHT));
@@ -228,6 +233,10 @@ public class ProductInvoicePdf {
         return new BigDecimal(value.toString());
     }
 
+    private String amountText(Object value) {
+        return value == null ? "0" : value.toString();
+    }
+
     private String money(Object value) {
         return decimal(value).setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
@@ -253,7 +262,7 @@ public class ProductInvoicePdf {
 
     private PdfPCell cell(String value, Font font, int alignment) {
         PdfPCell cell = new PdfPCell(new Phrase(value, font));
-        cell.setPadding(4);
+        cell.setPadding(5);
         cell.setHorizontalAlignment(alignment);
         cell.setVerticalAlignment(Element.ALIGN_TOP);
         return cell;
