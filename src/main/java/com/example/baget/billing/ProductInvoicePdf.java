@@ -98,7 +98,7 @@ public class ProductInvoicePdf {
 
                 BigDecimal confirmedTotal = decimal(snapshot.path("total"));
                 if (snapshot.hasNonNull("retailTotal")) confirmedTotal = decimal(snapshot.path("retailTotal"));
-                doc.add(new Paragraph("Підтверджена вартість виробу: " + money(confirmedTotal) + " грн", bold));
+                String confirmedLabel = snapshot.hasNonNull("retailTotal")\n                        ? "Підтверджена роздрібна вартість виробу: "\n                        : "Підтверджена вартість виробу: ";\n                doc.add(new Paragraph(confirmedLabel + money(confirmedTotal) + " грн", bold));
 
                 JsonNode lines = snapshot.path("lines");
                 if (lines.isArray() && !lines.isEmpty()) {
