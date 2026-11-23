@@ -81,7 +81,7 @@ public class ProductInvoicePdf {
 
             table.addCell(cell(line.get("orderNo").toString(), font, Element.ALIGN_CENTER));
             table.addCell(cell(label, font, Element.ALIGN_LEFT));
-            table.addCell(cell(money(line.get("originalAmount")), font, Element.ALIGN_RIGHT));
+            table.addCell(cell(amountText(line.get("originalAmount")), font, Element.ALIGN_RIGHT));
             table.addCell(cell(money(line.get("amount")), font, Element.ALIGN_RIGHT));
         }
         doc.add(table);
@@ -123,10 +123,10 @@ public class ProductInvoicePdf {
                         String kind = component.path("material").asBoolean(false) ? "Матеріал" : "Робота";
                         composition.addCell(cell(description + "\n" + kind + (role.isBlank() ? "" : " · " + role),
                                 font, Element.ALIGN_LEFT));
-                        composition.addCell(cell(component.path("unit").asText("—"), font, Element.ALIGN_CENTER));
-                        composition.addCell(cell(number(quantity), font, Element.ALIGN_RIGHT));
-                        composition.addCell(cell(money(unitPrice), font, Element.ALIGN_RIGHT));
-                        composition.addCell(cell(money(amount), font, Element.ALIGN_RIGHT));
+                        composition.addCell(cell(component.path("unit").asText("—"), detailFont, Element.ALIGN_CENTER));
+                        composition.addCell(cell(number(quantity), detailFont, Element.ALIGN_RIGHT));
+                        composition.addCell(cell(money(unitPrice), detailFont, Element.ALIGN_RIGHT));
+                        composition.addCell(cell(money(amount), detailFont, Element.ALIGN_RIGHT));
                     }
                     doc.add(composition);
                 } else {
@@ -145,7 +145,7 @@ public class ProductInvoicePdf {
             }
         }
 
-        Paragraph total = new Paragraph("Сума рахунку: " + money(invoice.get("amount")) + " грн", font);
+        Paragraph total = new Paragraph("Сума рахунку: " + amountText(invoice.get("amount")) + " грн", font);
         total.setAlignment(Element.ALIGN_RIGHT);
         total.setSpacingBefore(8);
         doc.add(total);
