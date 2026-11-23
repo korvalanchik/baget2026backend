@@ -18,8 +18,9 @@ public class ProductInvoiceController {
  @PostMapping public Object issue(@Valid @RequestBody ProductInvoiceProcessor.Issue r,Authentication a){return service.issue(r,a);}
  @PostMapping("/merge") public Object merge(@Valid @RequestBody ProductInvoiceProcessor.Merge r,Authentication a){return service.merge(r,a);}
  @PostMapping("/{id}/payment") public Object payment(@PathVariable("id") long id,@Valid @RequestBody ProductInvoiceProcessor.Payment r,Authentication a){return service.pay(id,r,a);}
- @GetMapping("/{id}/pdf") public ResponseEntity<byte[]> pdf(@PathVariable("id") long id,Authentication a) throws Exception {
-  return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename=invoice_"+id+".pdf").body(pdf.render(service.read(id,a)));
+ @GetMapping("/{id}/pdf") public ResponseEntity<byte[]> pdf(@PathVariable("id") long id,@RequestParam(name="format",defaultValue="general") String format,Authentication a) throws Exception {
+  if(!java.util.Set.of("general","detailed").contains(format))throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST,"Невідомий формат рахунку");
+  return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename=invoice_"+id+"_"+format+".pdf").body(pdf.render(service.read(id,a),"detailed".equals(format)));
  }
  @ExceptionHandler(PreviewException.class) public ResponseEntity<?> fail(PreviewException e){return ResponseEntity.status(e.getStatus()).body(Map.of("code",e.getCode(),"message",e.getMessage()));}
  @ExceptionHandler(org.springframework.dao.DuplicateKeyException.class) public ResponseEntity<?> duplicate(){return ResponseEntity.status(409).body(Map.of("message","Операцію вже виконано або виріб потрапив до іншого рахунку. Оновіть дані й перевірте результат."));}
