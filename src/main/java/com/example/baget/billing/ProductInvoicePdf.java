@@ -77,7 +77,7 @@ public class ProductInvoicePdf {
             table.addCell(cell);
         }
 
-        for (var line : (List<Map<String, Object>>) invoice.get("products")) {
+        for (var line : (java.util.List<Map<String, Object>>) invoice.get("products")) {
             JsonNode snapshot = (JsonNode) line.get("snapshot");
             String label = productDescription(line, snapshot);
 
@@ -89,7 +89,7 @@ public class ProductInvoicePdf {
         doc.add(table);
 
         if (detailed) {
-            for (var line : (List<Map<String, Object>>) invoice.get("products")) {
+            for (var line : (java.util.List<Map<String, Object>>) invoice.get("products")) {
                 JsonNode snapshot = (JsonNode) line.get("snapshot");
                 Paragraph productHeading = new Paragraph(
                         "Замовлення № " + line.get("orderNo") + " · виріб " + line.get("productId"), section);
