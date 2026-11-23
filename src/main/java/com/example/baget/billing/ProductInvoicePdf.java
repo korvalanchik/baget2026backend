@@ -2,8 +2,17 @@ package com.example.baget.billing;
 
 import com.example.baget.my_company.CompanyDetailsService;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.lowagie.text.*;
-import com.lowagie.text.pdf.*;
+import com.lowagie.text.BaseColor;
+import com.lowagie.text.BaseFont;
+import com.lowagie.text.Document;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -11,7 +20,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class ProductInvoicePdf {
@@ -77,7 +89,7 @@ public class ProductInvoicePdf {
             table.addCell(cell);
         }
 
-        for (var line : (java.util.List<Map<String, Object>>) invoice.get("products")) {
+        for (var line : (List<Map<String, Object>>) invoice.get("products")) {
             JsonNode snapshot = (JsonNode) line.get("snapshot");
             String label = productDescription(line, snapshot);
 
