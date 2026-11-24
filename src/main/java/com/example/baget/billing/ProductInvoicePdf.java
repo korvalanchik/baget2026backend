@@ -2,7 +2,7 @@ package com.example.baget.billing;
 
 import com.example.baget.my_company.CompanyDetailsService;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.lowagie.text.BaseFont;
+import com.lowagie.text.pdf.BaseFont;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
