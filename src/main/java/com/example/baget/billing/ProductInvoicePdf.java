@@ -2,8 +2,16 @@ package com.example.baget.billing;
 
 import com.example.baget.my_company.CompanyDetailsService;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.lowagie.text.*;
-import com.lowagie.text.pdf.*;
+import com.lowagie.text.pdf.BaseFont;
+import com.lowagie.text.Document;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -11,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -25,10 +34,13 @@ public class ProductInvoicePdf {
         this.company = company;
     }
 
-    @SuppressWarnings("unchecked")
     public byte[] render(Map<String, Object> invoice) throws Exception {
+        return render(invoice, false);
+    }
+
+    @SuppressWarnings("unchecked")
+    public byte[] render(Map<String, Object> invoice, boolean detailed) throws Exception {
         var out = new ByteArrayOutputStream();
-        // 8 pt top margin (~2.8 mm) to reduce paper use without clipping printer output.
         var doc = new Document(PageSize.A4, 36, 36, 8, 36);
         PdfWriter.getInstance(doc, out);
         doc.open();
@@ -38,6 +50,9 @@ public class ProductInvoicePdf {
                 BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
         var font = new Font(base, 10);
         var bold = new Font(base, 11, Font.BOLD);
+        var section = new Font(base, 10, Font.BOLD);
+        var detailFont = new Font(base, 8);
+        var detailBold = new Font(base, 8, Font.BOLD);
         var supplier = company.get();
 
         doc.add(new Paragraph("Постачальник: " + supplier.getFullName(), bold));
@@ -79,13 +94,74 @@ public class ProductInvoicePdf {
 
             table.addCell(cell(line.get("orderNo").toString(), font, Element.ALIGN_CENTER));
             table.addCell(cell(label, font, Element.ALIGN_LEFT));
-            table.addCell(cell(line.get("originalAmount").toString(), font, Element.ALIGN_RIGHT));
-            table.addCell(cell(line.get("amount").toString(), font, Element.ALIGN_RIGHT));
+            table.addCell(cell(amountText(line.get("originalAmount")), font, Element.ALIGN_RIGHT));
+            table.addCell(cell(amountText(line.get("amount")), font, Element.ALIGN_RIGHT));
         }
-
         doc.add(table);
 
-        Paragraph total = new Paragraph("Сума рахунку: " + invoice.get("amount") + " грн", font);
+        if (detailed) {
+            for (var line : (java.util.List<Map<String, Object>>) invoice.get("products")) {
+                JsonNode snapshot = (JsonNode) line.get("snapshot");
+                Paragraph productHeading = new Paragraph(
+                        "Замовлення № " + line.get("orderNo") + " · виріб " + line.get("productId"), section);
+                productHeading.setSpacingBefore(12);
+                productHeading.setSpacingAfter(4);
+                doc.add(productHeading);
+                doc.add(new Paragraph(productDescription(line, snapshot), font));
+
+                BigDecimal confirmedTotal = decimal(snapshot.path("total"));
+                if (snapshot.hasNonNull("retailTotal")) confirmedTotal = decimal(snapshot.path("retailTotal"));
+                String confirmedLabel = snapshot.hasNonNull("retailTotal")
+                        ? "Підтверджена роздрібна вартість виробу: "
+                        : "Підтверджена вартість виробу: ";
+                doc.add(new Paragraph(confirmedLabel + money(confirmedTotal) + " грн", bold));
+
+                JsonNode lines = snapshot.path("lines");
+                if (lines.isArray() && !lines.isEmpty()) {
+                    var composition = new PdfPTable(new float[]{4, 1, 1.3f, 1.3f, 1.5f});
+                    composition.setWidthPercentage(100);
+                    composition.setSpacingBefore(5);
+                    composition.setHeaderRows(1);
+                    for (String header : new String[]{"Матеріал / робота", "Од.", "Кількість", "Ціна за од.", "Сума"}) {
+                        composition.addCell(headerCell(header, detailBold));
+                    }
+                    Map<Long, JsonNode> resellerLines = resellerLines(snapshot.path("resellerLines"));
+                    for (JsonNode component : lines) {
+                        long itemNo = component.path("itemNo").asLong();
+                        JsonNode reseller = resellerLines.get(itemNo);
+                        BigDecimal quantity = decimal(component.path("actual"));
+                        BigDecimal unitPrice = reseller == null
+                                ? decimal(component.path("price")) : decimal(reseller.path("unitPrice"));
+                        BigDecimal amount = reseller == null
+                                ? decimal(component.path("amount")) : decimal(reseller.path("amount"));
+                        String description = component.path("description").asText("Позиція " + itemNo);
+                        String role = component.path("role").asText("");
+                        String kind = component.path("material").asBoolean(false) ? "Матеріал" : "Робота";
+                        composition.addCell(cell(description + "\n" + kind + (role.isBlank() ? "" : " · " + role),
+                                detailFont, Element.ALIGN_LEFT));
+                        composition.addCell(cell(component.path("unit").asText("—"), detailFont, Element.ALIGN_CENTER));
+                        composition.addCell(cell(number(quantity), detailFont, Element.ALIGN_RIGHT));
+                        composition.addCell(cell(money(unitPrice), detailFont, Element.ALIGN_RIGHT));
+                        composition.addCell(cell(money(amount), detailFont, Element.ALIGN_RIGHT));
+                    }
+                    doc.add(composition);
+                } else {
+                    doc.add(new Paragraph("Деталізація складу для цього виробу відсутня у збереженому підтвердженому розрахунку.", font));
+                }
+
+                Paragraph invoiceAmount = new Paragraph(
+                        "Сума, включена до цього рахунку: " + money(line.get("amount")) + " грн", bold);
+                invoiceAmount.setAlignment(Element.ALIGN_RIGHT);
+                invoiceAmount.setSpacingBefore(4);
+                doc.add(invoiceAmount);
+                if (line.get("sourceInvoiceNo") != null) {
+                    doc.add(new Paragraph("Перенесено із рахунку № " + line.get("sourceInvoiceNo") +
+                            ". Сума в цьому документі є залишком, а не повторною вартістю виробу.", font));
+                }
+            }
+        }
+
+        Paragraph total = new Paragraph("Сума рахунку: " + amountText(invoice.get("amount")) + " грн", font);
         total.setAlignment(Element.ALIGN_RIGHT);
         total.setSpacingBefore(8);
         doc.add(total);
@@ -109,25 +185,35 @@ public class ProductInvoicePdf {
         return out.toByteArray();
     }
 
+    private Map<Long, JsonNode> resellerLines(JsonNode lines) {
+        var result = new HashMap<Long, JsonNode>();
+        if (lines != null && lines.isArray()) {
+            for (JsonNode line : lines) result.put(line.path("itemNo").asLong(), line);
+        }
+        return result;
+    }
+
+    private PdfPCell headerCell(String value, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(value, font));
+        cell.setPadding(4);
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        return cell;
+    }
+
     private String productDescription(Map<String, Object> line, JsonNode snapshot) {
         int quantity = snapshot.path("configuration").path("draft").path("form")
                 .path("productQuantity").asInt(1);
         BigDecimal width = decimal(snapshot.path("widthMm"));
         BigDecimal height = decimal(snapshot.path("heightMm"));
-
-        // Match the workshop calculation: the visible mat margins enlarge the
-        // artwork dimensions once, using the outer dimensions of the finished item.
         JsonNode margins = findMatMargins(snapshot);
         if (margins != null) {
             width = width.add(decimal(margins.path("leftMm"))).add(decimal(margins.path("rightMm")));
             height = height.add(decimal(margins.path("topMm"))).add(decimal(margins.path("bottomMm")));
         }
-
         String label = "Виріб " + line.get("productId") + " (екз.: " + quantity + ")" +
                 "; " + dimension(width) + " × " + dimension(height) + " мм";
-        if (line.get("sourceInvoiceNo") != null) {
-            label += "; залишок з № " + line.get("sourceInvoiceNo");
-        }
+        if (line.get("sourceInvoiceNo") != null) label += "; залишок з № " + line.get("sourceInvoiceNo");
         return label;
     }
 
@@ -135,10 +221,8 @@ public class ProductInvoicePdf {
         JsonNode draft = snapshot.path("configuration").path("draft");
         JsonNode formMargins = draft.path("form").path("matMargins");
         if (formMargins.isObject()) return formMargins;
-
         JsonNode productMargins = draft.path("form").path("product").path("matMargins");
         if (productMargins.isObject()) return productMargins;
-
         JsonNode components = draft.path("components");
         if (components.isArray()) {
             for (JsonNode component : components) {
@@ -152,6 +236,24 @@ public class ProductInvoicePdf {
     private BigDecimal decimal(JsonNode value) {
         return value == null || value.isMissingNode() || value.isNull() || !value.isNumber()
                 ? BigDecimal.ZERO : value.decimalValue();
+    }
+
+    private BigDecimal decimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal number) return number;
+        return new BigDecimal(value.toString());
+    }
+
+    private String amountText(Object value) {
+        return value == null ? "0" : value.toString();
+    }
+
+    private String money(Object value) {
+        return decimal(value).setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String number(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
     }
 
     private String dimension(BigDecimal value) {
