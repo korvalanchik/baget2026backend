@@ -96,6 +96,14 @@ class ProductInvoiceProcessorTest {
   when(access.admin(user)).thenReturn(true);service.ready(0,7L,auth);
   verify(db).queryForList(contains("AND o.commerce_partner_id=?"),eq(7L),eq(0));
  }
+ @Test void invoiceListUsesTenRowsAndTenRowPageOffset() {
+  when(access.admin(user)).thenReturn(true);
+  when(db.queryForList(contains("LIMIT 11 OFFSET ?"), any(Object[].class))).thenReturn(List.of());
+  service.list(1,auth);
+  var args=org.mockito.ArgumentCaptor.forClass(Object[].class);
+  verify(db).queryForList(contains("LIMIT 11 OFFSET ?"),args.capture());
+  assertArrayEquals(new Object[]{10},args.getValue());
+ }
  @Test void cancelledOrderCannotCreateInvoice() {
   when(db.queryForObject("SELECT COUNT(*) FROM orders WHERE OrderNo=? AND StatusOrder IN (5,10)",Long.class,1L)).thenReturn(1L);
   var error=assertThrows(PreviewException.class,()->service.issue(request(),auth));

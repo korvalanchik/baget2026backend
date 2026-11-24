@@ -70,6 +70,7 @@ public class ProductInvoiceProcessor {
   return rows;
  }
  private int offset(int page){return Math.max(0,Math.min(page,100000))*100;}
+ private int invoiceOffset(int page){return Math.max(0,Math.min(page,100000))*10;}
  private String scope(User u,List<Object> args,String column){
   if(access.admin(u))return "";
   var ids=u.getAllowedBranches().stream().map(b->b.getBranchNo()).toList();
@@ -104,8 +105,9 @@ public class ProductInvoiceProcessor {
    String marks=String.join(",",Collections.nCopies(ids.size(),"?"));args.addAll(ids);args.addAll(ids);
    filter=" AND NOT EXISTS(SELECT 1 FROM invoice_orders io JOIN orders o ON o.OrderNo=io.order_no WHERE io.invoice_id=i.id AND o.BranchNo NOT IN ("+marks+")) AND NOT EXISTS(SELECT 1 FROM customer_transactions t WHERE t.invoice_id=i.id AND t.type IN ('INVOICE','INVOICE_MERGE_OUT') AND t.branch_id NOT IN ("+marks+"))";
   }
-  args.add(offset(page));
-  var rows=db.queryForList("SELECT DISTINCT i.id,i.invoice_no AS invoiceNo,c.Company AS payerName,i.total_amount AS amount,i.status,i.lifecycle,(SELECT partner_id FROM invoice_commercial_owner co WHERE co.invoice_id=i.id) AS partnerId FROM invoices i JOIN customer c ON c.CustNo=i.customer_id WHERE EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=i.id)"+filter+" ORDER BY i.id DESC LIMIT 100 OFFSET ?",args.toArray());
+  args.add(invoiceOffset(page));
+  // Fetch one extra row so the UI can tell whether another page exists.
+  var rows=db.queryForList("SELECT DISTINCT i.id,i.invoice_no AS invoiceNo,c.Company AS payerName,i.total_amount AS amount,i.status,i.lifecycle,(SELECT partner_id FROM invoice_commercial_owner co WHERE co.invoice_id=i.id) AS partnerId FROM invoices i JOIN customer c ON c.CustNo=i.customer_id WHERE EXISTS(SELECT 1 FROM invoice_products ip WHERE ip.invoice_id=i.id)"+filter+" ORDER BY i.id DESC LIMIT 11 OFFSET ?",args.toArray());
   for(var row:rows)row.put("debt",ledger.calculateInvoiceDebt(((Number)row.get("id")).longValue()));return rows;
  }
  public Map<String,Object> read(long id,Authentication a){
