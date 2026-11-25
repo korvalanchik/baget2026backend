@@ -27,6 +27,8 @@ public class CalculatedOrderService {
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher orderEvents;
     @org.springframework.beans.factory.annotation.Autowired
+    private PreliminaryOrderInvoicePdf preliminaryInvoices;
+    @org.springframework.beans.factory.annotation.Autowired
     private com.example.baget.commercial.CommercialService commercial;
     private final JdbcTemplate db;
     private final EstimatePreviewService preview;
@@ -106,6 +108,7 @@ public class CalculatedOrderService {
         applyDeadlineApproval(orderNo, r.dueDate(), r.deadlineApprovedWithWorkshop(), user);
         persist(orderNo,1,priced,auth.getName());
         for(long id:ids) reservations.refillPart(id,auth.getName());
+        refreshPreliminaryInvoice(orderNo, settings.get("mode").toString());
         if(orderEvents!=null) orderEvents.publishEvent(new com.example.baget.telegram.OrderCopyCreated(orderNo));
         return read(orderNo,auth);
     }
@@ -142,6 +145,7 @@ public class CalculatedOrderService {
             applyDeadlineApproval(orderNo, r.dueDate(), r.deadlineApprovedWithWorkshop(), actor);
         }
         for(long id:ids) reservations.refillPart(id,auth.getName());
+        refreshPreliminaryInvoice(orderNo, mode);
         return read(orderNo,auth);
     }
     public View cancel(long orderNo,long revision,Authentication auth) {
@@ -159,6 +163,12 @@ public class CalculatedOrderService {
         for(long id:ids) reservations.refillPart(id,auth.getName());
         return read(orderNo,auth);
     }
+    private void refreshPreliminaryInvoice(long orderNo,String mode) {
+        if (!"RESELLER".equals(mode)) return;
+        try { preliminaryInvoices.refresh(orderNo); }
+        catch (Exception e) { throw new IllegalStateException("Не вдалося сформувати попередній рахунок замовлення №"+orderNo,e); }
+    }
+
     private void applyDeadlineApproval(long orderNo, LocalDate dueDate, boolean agreed, User actor) {
         boolean required = DeadlineApproval.isRequired(dueDate, LocalDate.now(DeadlineApproval.BUSINESS_ZONE));
         boolean approved = required && agreed;
