@@ -29,6 +29,17 @@ public class PreliminaryOrderInvoicePdf {
         this.db=db; this.json=json; this.company=company;
     }
 
+    public void refresh(long orderNo) throws Exception {
+        byte[] pdf=render(orderNo);
+        db.update("INSERT INTO preliminary_order_invoices(order_no,pdf,updated_at) VALUES(?,?,CURRENT_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE pdf=VALUES(pdf),updated_at=CURRENT_TIMESTAMP(6)",orderNo,pdf);
+    }
+
+    public byte[] get(long orderNo) {
+        var rows=db.query("SELECT pdf FROM preliminary_order_invoices WHERE order_no=?",(rs,n)->rs.getBytes(1),orderNo);
+        if(rows.isEmpty()) throw new IllegalStateException("Попередній рахунок ще не сформовано");
+        return rows.get(0);
+    }
+
     public byte[] render(long orderNo) throws Exception {
         var rows=db.queryForList("SELECT o.OrderNo,o.SaleDate,o.ShipDate,o.ItemsTotal,o.commerce_mode,c.Company,c.Mobile,c.Addr1,b.BranchName FROM orders o JOIN customer c ON c.CustNo=o.CustNo JOIN branches b ON b.BranchNo=o.BranchNo WHERE o.OrderNo=?",orderNo);
         if(rows.isEmpty() || !"RESELLER".equals(rows.get(0).get("commerce_mode")))
