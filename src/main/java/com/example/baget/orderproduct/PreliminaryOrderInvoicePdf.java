@@ -34,8 +34,13 @@ public class PreliminaryOrderInvoicePdf {
         db.update("INSERT INTO preliminary_order_invoices(order_no,pdf,updated_at) VALUES(?,?,CURRENT_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE pdf=VALUES(pdf),updated_at=CURRENT_TIMESTAMP(6)",orderNo,pdf);
     }
 
-    public byte[] get(long orderNo) {
+    public byte[] get(long orderNo) throws Exception {
         var rows=db.query("SELECT pdf FROM preliminary_order_invoices WHERE order_no=?",(rs,n)->rs.getBytes(1),orderNo);
+        if(rows.isEmpty()) {
+            // Backfill a document for a pre-existing calculated reseller order on first access.
+            refresh(orderNo);
+            rows=db.query("SELECT pdf FROM preliminary_order_invoices WHERE order_no=?",(rs,n)->rs.getBytes(1),orderNo);
+        }
         if(rows.isEmpty()) throw new IllegalStateException("Попередній рахунок ще не сформовано");
         return rows.get(0);
     }
