@@ -21,7 +21,7 @@ public class CalculatedOrderController {
     public ResponseEntity<byte[]> preliminaryInvoice(@PathVariable("id") long id, Authentication a) throws Exception {
         var order=service.read(id,a);
         if (!"RESELLER".equals(order.commerceMode())) throw new PreviewException(HttpStatus.NOT_FOUND,"PRELIMINARY_INVOICE_NOT_FOUND","Попередній рахунок доступний лише для філій-посередників");
-        byte[] pdf=preliminaryInvoices.render(id);
+        byte[] pdf=preliminaryInvoices.get(id);
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename=preliminary-order-"+id+".pdf").contentType(MediaType.APPLICATION_PDF).body(pdf);
     }
     @PutMapping("/{id}") public CalculatedOrderService.View update(@PathVariable("id") long id,@Valid @RequestBody CalculatedOrderRequest r,Authentication a){return service.update(id,r,a);}
