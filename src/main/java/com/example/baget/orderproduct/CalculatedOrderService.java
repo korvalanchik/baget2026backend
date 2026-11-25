@@ -27,6 +27,8 @@ public class CalculatedOrderService {
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher orderEvents;
     @org.springframework.beans.factory.annotation.Autowired
+    private PreliminaryOrderInvoicePdf preliminaryInvoices;
+    @org.springframework.beans.factory.annotation.Autowired
     private com.example.baget.commercial.CommercialService commercial;
     private final JdbcTemplate db;
     private final EstimatePreviewService preview;
@@ -42,7 +44,7 @@ public class CalculatedOrderService {
     }
     public record ProductView(long id, String clientProductId, JsonNode configuration, JsonNode calculation,
                               BigDecimal total, List<InventoryReservations.Balance> materials) {}
-    public record View(long orderNo,long revision,int statusOrder,String branchName,long custNo,String company,
+    public record View(long orderNo,long revision,int statusOrder,String branchName,String commerceMode,long custNo,String company,
                        String phone,String address,String notice,LocalDate dueDate,
                        String deadlineApprovalStatus,String deadlineApprovedBy,Instant deadlineApprovedAt,
                        BigDecimal total,List<ProductView> products) {}
@@ -106,6 +108,7 @@ public class CalculatedOrderService {
         applyDeadlineApproval(orderNo, r.dueDate(), r.deadlineApprovedWithWorkshop(), user);
         persist(orderNo,1,priced,auth.getName());
         for(long id:ids) reservations.refillPart(id,auth.getName());
+        refreshPreliminaryInvoice(orderNo, settings.get("mode").toString());
         if(orderEvents!=null) orderEvents.publishEvent(new com.example.baget.telegram.OrderCopyCreated(orderNo));
         return read(orderNo,auth);
     }
@@ -142,6 +145,7 @@ public class CalculatedOrderService {
             applyDeadlineApproval(orderNo, r.dueDate(), r.deadlineApprovedWithWorkshop(), actor);
         }
         for(long id:ids) reservations.refillPart(id,auth.getName());
+        refreshPreliminaryInvoice(orderNo, mode);
         return read(orderNo,auth);
     }
     public View cancel(long orderNo,long revision,Authentication auth) {
@@ -159,6 +163,12 @@ public class CalculatedOrderService {
         for(long id:ids) reservations.refillPart(id,auth.getName());
         return read(orderNo,auth);
     }
+    private void refreshPreliminaryInvoice(long orderNo,String mode) {
+        if (!"RESELLER".equals(mode)) return;
+        try { preliminaryInvoices.refresh(orderNo); }
+        catch (Exception e) { throw new IllegalStateException("Не вдалося сформувати попередній рахунок замовлення №"+orderNo,e); }
+    }
+
     private void applyDeadlineApproval(long orderNo, LocalDate dueDate, boolean agreed, User actor) {
         boolean required = DeadlineApproval.isRequired(dueDate, LocalDate.now(DeadlineApproval.BUSINESS_ZONE));
         boolean approved = required && agreed;
@@ -182,18 +192,18 @@ public class CalculatedOrderService {
     }
     public View read(long orderNo,Authentication auth) {
         db.queryForList("SELECT OrderNo FROM orders WHERE OrderNo=? FOR SHARE",Long.class,orderNo);
-        var headers=db.query("SELECT o.calculation_revision,o.StatusOrder,b.BranchName,o.CustNo,c.Company,c.Mobile,c.Addr1,o.Notice,o.ShipDate,o.deadline_approval_status,ua.username,o.deadline_approved_at,o.ItemsTotal "
+        var headers=db.query("SELECT o.calculation_revision,o.StatusOrder,b.BranchName,o.commerce_mode,o.CustNo,c.Company,c.Mobile,c.Addr1,o.Notice,o.ShipDate,o.deadline_approval_status,ua.username,o.deadline_approved_at,o.ItemsTotal "
                         + "FROM orders o JOIN branches b ON b.BranchNo=o.BranchNo JOIN customer c ON c.CustNo=o.CustNo "
                         + "LEFT JOIN users ua ON ua.id=o.deadline_approved_by_user_id WHERE o.OrderNo=?",
-                (rs,n)->new View(orderNo,rs.getLong(1),rs.getInt(2),rs.getString(3),rs.getLong(4),rs.getString(5),rs.getString(6),rs.getString(7),rs.getString(8),
-                        rs.getDate(9)==null?null:rs.getDate(9).toLocalDate(),rs.getString(10),rs.getString(11),
-                        rs.getTimestamp(12)==null?null:rs.getTimestamp(12).toInstant(),rs.getBigDecimal(13),List.of()),orderNo);
+                (rs,n)->new View(orderNo,rs.getLong(1),rs.getInt(2),rs.getString(3),rs.getString(4),rs.getLong(5),rs.getString(6),rs.getString(7),rs.getString(8),rs.getString(9),
+                        rs.getDate(10)==null?null:rs.getDate(10).toLocalDate(),rs.getString(11),rs.getString(12),
+                        rs.getTimestamp(13)==null?null:rs.getTimestamp(13).toInstant(),rs.getBigDecimal(14),List.of()),orderNo);
         if(headers.isEmpty()) throw error(HttpStatus.NOT_FOUND,"ORDER_NOT_FOUND","Замовлення не знайдено");
         var h=headers.get(0);access(auth,h.branchName());
         if(h.revision()==0) throw bad("Це замовлення створено у старій формі");
         var products=db.query("SELECT id,client_product_id,configuration,calculation,total FROM order_products WHERE order_no=? AND active=1 ORDER BY id",
                 (rs,n)->new ProductView(rs.getLong(1),rs.getString(2),decode(rs.getString(3)),decode(rs.getString(4)),rs.getBigDecimal(5),reservations.balances(rs.getLong(1))),orderNo);
-        return new View(h.orderNo(),h.revision(),h.statusOrder(),h.branchName(),h.custNo(),h.company(),h.phone(),h.address(),h.notice(),
+        return new View(h.orderNo(),h.revision(),h.statusOrder(),h.branchName(),h.commerceMode(),h.custNo(),h.company(),h.phone(),h.address(),h.notice(),
                 h.dueDate(),h.deadlineApprovalStatus(),h.deadlineApprovedBy(),h.deadlineApprovedAt(),h.total(),products);
     }
     private TreeSet<Long> materialIds(List<Priced> priced) {
