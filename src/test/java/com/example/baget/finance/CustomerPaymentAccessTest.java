@@ -43,6 +43,12 @@ class CustomerPaymentAccessTest {
   when(db.queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L))).thenReturn(List.of(2L));
   assertThrows(PreviewException.class,()->access.invoicePayment(manager,5,false));
  }
+ @Test void administratorMayPayResellerInvoiceWithoutAccessToSourceBranches(){
+  Role role=new Role();role.setName("ROLE_ADMIN");manager.setRoles(List.of(role));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(1L);
+  access.invoicePayment(manager,5,false);
+  verify(db,never()).queryForList(startsWith("SELECT DISTINCT o.BranchNo"),eq(Long.class),eq(5L));
+ }
  @Test void accountantMayPayResellerInvoiceInCashWithoutAccessToSourceBranches(){
   Role role=new Role();role.setName("ROLE_ACCOUNTANT");manager.setRoles(List.of(role));
   when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(5L))).thenReturn(1L);

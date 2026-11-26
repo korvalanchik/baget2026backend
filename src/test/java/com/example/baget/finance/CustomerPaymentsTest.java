@@ -82,4 +82,23 @@ class CustomerPaymentsTest {
   verify(settlement).settleInvoice(new InvoicePaymentRequest(1L,5L,10L,new BigDecimal("10"),BigDecimal.ZERO,"Оплата рахунку реселлера",2L),auth);
  }
 
+
+ @Test void administratorCanSettleResellerInvoiceWithCentralCash(){
+  var admin=new User();when(access.user(auth)).thenReturn(admin);
+  when(access.resellerInvoiceForPartner(admin,10L,5L)).thenReturn(true);
+  when(db.query(eq("SELECT kind FROM cash_accounts WHERE id = ?"),any(org.springframework.jdbc.core.ResultSetExtractor.class),eq(2L))).thenReturn("CENTRAL_CASH");
+  when(db.queryForObject("SELECT CustNo FROM customer WHERE CustNo=? FOR UPDATE",Long.class,10L)).thenReturn(10L);
+  when(db.queryForList(startsWith("SELECT customer_id,branch_no"),eq(key))).thenReturn(List.of());
+  when(db.queryForObject("SELECT id FROM invoices WHERE id=? FOR UPDATE",Long.class,5L)).thenReturn(5L);
+  var customer=new Customer();customer.setCustNo(10L);var invoice=new Invoice();invoice.setCustomer(customer);
+  when(invoices.findById(5L)).thenReturn(Optional.of(invoice));
+  when(finance.calculateInvoiceDebt(invoice)).thenReturn(new BigDecimal("100"));
+  when(settlement.settleInvoice(any(),eq(auth))).thenReturn(List.of());
+  var payment=new CustomerPayments.Payment(key,1,5L,new BigDecimal("10"),BigDecimal.ZERO,"Оплата рахунку посередника",2L,null);
+  service.pay(10,payment,auth);
+  verify(access,never()).customer(any(),anyLong(),anyLong());
+  verify(access).invoicePayment(admin,5L,false);
+  verify(settlement).settleInvoice(new InvoicePaymentRequest(1L,5L,10L,new BigDecimal("10"),BigDecimal.ZERO,"Оплата рахунку посередника",2L),auth);
+ }
+
 }

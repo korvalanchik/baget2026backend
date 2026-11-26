@@ -33,7 +33,7 @@ public class CustomerPaymentAccess {
     }
     /** A reseller invoice is a company receivable, not a payment collected at a reseller branch. */
     public boolean resellerInvoiceForPartner(User u,long partnerId,long invoiceId) {
-        return accountant(u) && db.queryForObject(
+        return (admin(u) || accountant(u)) && db.queryForObject(
                 "SELECT COUNT(*) FROM invoice_commercial_owner co JOIN invoices i ON i.id=co.invoice_id WHERE co.invoice_id=? AND co.partner_id=? AND i.customer_id=?",
                 Long.class,invoiceId,partnerId,partnerId)>0;
     }
@@ -48,9 +48,9 @@ public class CustomerPaymentAccess {
     public void invoice(User u,long id) {
         invoicePayment(u,id,false);
     }
-    /** Cross-branch payment access is limited to accountants: bank for ordinary invoices, central cash or bank for reseller invoices. */
+    /** Cross-branch payment access is limited to administrators/accountants for reseller invoices; ordinary invoices retain the accountant bank-only exception. */
     public void invoicePayment(User u,long id,boolean bankPayment) {
-        if(resellerInvoice(id)) { if(accountant(u)) return; throw denied(); }
+        if(resellerInvoice(id)) { if(admin(u) || accountant(u)) return; throw denied(); }
         var branches=db.queryForList("SELECT DISTINCT o.BranchNo FROM invoice_orders io JOIN orders o ON o.OrderNo=io.order_no WHERE io.invoice_id=?",Long.class,id);
         if(branches.isEmpty()) throw denied();
         boolean crossBranchBankPayment=bankPayment && accountant(u);
