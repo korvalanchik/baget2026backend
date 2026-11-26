@@ -64,6 +64,19 @@ class CashServiceTest {
   verify(db).queryForList(argThat(sql->sql.contains("a.kind IN ('BANK','CENTRAL_CASH')")));
  }
 
+ @Test void administratorCanLoadResellerInvoicePaymentOptions(){
+  role("ROLE_ADMIN");
+  when(db.queryForList(startsWith("SELECT branch_id FROM ledger_entries"),eq(902L))).thenReturn(List.of(Map.of("branch_id",8L)));
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(902L))).thenReturn(1L);
+  when(db.queryForList(argThat(sql->sql.contains("a.kind IN ('BANK','CENTRAL_CASH')")))).thenReturn(List.of(Map.of("id",2L,"kind","CENTRAL_CASH"),Map.of("id",4L,"kind","BANK")));
+  assertEquals(2,((List<?>)service.invoicePaymentOptions(902L,auth)).size());
+ }
+ @Test void administratorCanUseCentralCashForResellerInvoiceWithoutBranchAccess(){
+  role("ROLE_ADMIN");
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(8L))).thenReturn(1L);
+  when(db.queryForObject(startsWith("SELECT COUNT(*) FROM invoice_commercial_owner"),eq(Long.class),eq(900L))).thenReturn(1L);
+  assertEquals(2L,service.paymentAccount(user,8,2L,900L));
+ }
  @Test void accountantCanUseCentralCashForResellerInvoiceWithoutBranchAccess(){
   role("ROLE_ACCOUNTANT");
   when(db.queryForObject(startsWith("SELECT COUNT(*) FROM branch_commercial_settings"),eq(Long.class),eq(8L))).thenReturn(1L);
